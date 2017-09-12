@@ -10,6 +10,15 @@ To plot data from a single file, simply provide the file you wish to plot as an 
 your data is organized in columns, with the first column containing the generation number, and the second column containing
 the value (e.g. performance) at that generation. You can use options to change this default behavior.
 
+To test this yourself, cd into the examples directory and type:
+
+`createPlots.py myData.dat`
+
+The result should look like this:
+
+![Example plot 1](examples/example_plot_1/example_plot.png "Example plot 1")
+
+
 ### Plotting directories of files
 Besides plotting individual files, createPlots.py can also plot entire directories filled with data files. When plotting a
 directory, createPlots.py will assume that each file in that directory holds data you want to plot, and that all files belong
@@ -19,4 +28,11 @@ as a separate treatment, and thus a different median will be plotted for each di
 script will calculate statistical signficance (Mann-Withney U) between the first treatment and the other treatments at each
 generation, and it will plot the results of these tests as symbols below the plot.
 
-![Example plot 1](examples/example_plot/example_plot.png "Example plot 1")
+
+To test this yourself, cd into the examples directory and type:
+
+`createPlots.py treatment1 treatment2`
+
+The result should look like this:
+
+![Example plot 2](examples/example_plot_2/example_plot.png "Example plot 1")
