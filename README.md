@@ -19,4 +19,4 @@ as a separate treatment, and thus a different median will be plotted for each di
 script will calculate statistical signficance (Mann-Withney U) between the first treatment and the other treatments at each
 generation, and it will plot the results of these tests as symbols below the plot.
 
-![Example plot](https://github.com/JoostHuizinga/ea-plotting-scripts/tree/master/examples/example_plot/example_plot.png "Example plot 1")
+![Example plot 1](examples/example_plot/example_plot.png "Example plot 1")
