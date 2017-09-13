@@ -20,13 +20,13 @@ setting the x_from_file and x_column options.
 
 And example of a properly formatted file would be:
 
-`
+```
 0 0.2
 1 0.4
 2 0.6
 3 0.8
 4 1.0
-`
+```
 
 ### Plotting a single file
 To plot data from a single file, simply provide the file you wish to plot as an argument to createPlots.py.
@@ -66,7 +66,8 @@ While all plotting script options can be set through the command line, it is oft
 configuration file. This configuration file holds values for all options you want to pass, and can easily be
 adjusted whenever you want to make a small change to your plot. An example configuration file would be:
 
-`#### General ####
+```
+#### General ####
 templates "file.*.dat"
 
 #### Plots ####
@@ -89,7 +90,8 @@ treatment_marker "o"
 treatment_name   "Treatment 2"
 treatment_dir    "treatment2"
 treatment_color  "#000082"
-treatment_marker "s"`
+treatment_marker "s"
+```
 
 Once you have such a configuration file, and let's say it is named `exampleConfig.txt`, you can load with:
 
