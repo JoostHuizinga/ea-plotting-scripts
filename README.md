@@ -61,7 +61,7 @@ The result should look like this:
 ![Example plot 2](examples/example_plot_2/example_plot.png "Example plot 2")
 
 
-### Plotting from a configuration files
+### Plotting from a configuration file
 While all plotting script options can be set through the command line, it is often more convenient to use a 
 configuration file. This configuration file holds values for all options you want to pass, and can easily be
 adjusted whenever you want to make a small change to your plot. An example configuration file would be:
