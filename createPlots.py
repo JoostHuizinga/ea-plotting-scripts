@@ -20,7 +20,16 @@ LINE_WIDTH = 2
 FILL_ALPHA = 0.5
 
 #Derived defaults
-def def_output_dir(): return base(getStr("config_file")) + "_out"
+def def_output_dir():
+    if getExists("config_file"):
+        return base(getStr("config_file")) + "_out"
+    else:
+        number = 1
+        name = "my_plot_" + str(number)
+        while os.path.exists(name):
+            number += 1
+            name = "my_plot_" + str(number)
+        return name
 def def_comp_cache(): return base(getStr("config_file")) + ".cache"
 def def_box_height(): return max((len(getList("input_directories"))-1)*0.35, 0.5)
 def def_marker_step():
@@ -133,6 +142,8 @@ addOption("comparison_offset_y", 0.1, nargs=1,
           help="Allows moving the labels next the significance indicator box.")
 addOption("sig_label", "p<0.05 vs ", nargs=1,
           help="Label next to the significance indicator box.")
+addOption("type", "pdf", nargs=1,
+          help="The file type in which the plot will be written.")
 
 #Font settings
 addOption("sig", True, nargs=1)
@@ -157,7 +168,7 @@ addOption("legend_y_offset", 0, nargs=1,
 #Per plot settings
 addOption("to_plot", 1, aliases=["plot_column"],
           help="The columns from the input files that should be plotted.")
-addOption("file_names", aliases=["plot_output"],
+addOption("file_names", "my_plot", aliases=["plot_output"],
           help="The names of the output files for each plotted column.")
 addOption("titles", "Unnamed plot", aliases=["plot_title"],
           help="The titles for each plot.")
@@ -240,20 +251,20 @@ class Treatment:
                 files = get_files(self.templates, pool_dir)
                 self.files += files
                 self.files_per_pool.append(files)
-            self.cache_file_name_prefix = (self.root_directory + "/" +
+            self.cache_file_name_prefix = (self.root_directory + "/ch_" +
                                            self.templates[-1] + "_")
         if os.path.isdir(directory):
             debug_print("files", "Retrieving files from directory:", directory,
                         "with template:", self.templates)
             self.root_directory = directory
             self.files = get_files(self.templates, directory)
-            self.cache_file_name_prefix = (self.root_directory + "/" +
+            self.cache_file_name_prefix = (self.root_directory + "/ch_" +
                                            self.templates[-1] + "_")
         elif os.path.isfile(directory):
             debug_print("files", "Retrieving file:", directory)
             self.root_directory = os.path.dirname(os.path.realpath(directory))
             self.files = [directory]
-            self.cache_file_name_prefix = (self.root_directory + "/" +
+            self.cache_file_name_prefix = (self.root_directory + "/ch_" +
                                            os.path.basename(directory) + "_")
         else:
             debug_print("files", "File not found.")
@@ -1189,6 +1200,7 @@ def setup_plots(nr_of_generations):
 def write_plots():
     print("Writing plots...")
     output_dir = getStr("output_directory")
+    ext = "." + getStr("type")
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -1209,14 +1221,14 @@ def write_plots():
             lgd = ax.legend(loc=loc, ncol=columns,
                             bbox_to_anchor=(anchor_x, anchor_y, 1, 1))
             if lgd:
-                plt.savefig(output_dir + "/" + getStr("file_names", i) + ".pdf",
+                plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,
                             bbox_extra_artists=(lgd,), bbox_inches='tight')
             else:
                 print "Warning: insufficient data to create legend."
-                plt.savefig(output_dir + "/" + getStr("file_names", i) + ".pdf",
+                plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,
                             bbox_inches='tight')
         else:
-            plt.savefig(output_dir + "/" + getStr("file_names", i) + ".pdf")
+            plt.savefig(output_dir + "/" + getStr("file_names", i) + ext)
         print("Writing plot " + str(i) + " done.")
 
 

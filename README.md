@@ -5,10 +5,33 @@ A set of plotting scripts specifically designed to the plot the results of evolu
 The entry point for the plotting scripts is createPlots.py. The createPlotUtils.py file holds some usefull helper functions,
 but should not be run directly.
 
-### Plot a single file
-To plot data from a single file, simply provide the file you wish to plot as an argument to createPlots.py. It is assumed that
-your data is organized in columns, with the first column containing the generation number, and the second column containing
-the value (e.g. performance) at that generation. You can use options to change this default behavior.
+
+### Data format
+The createPlots.py requires that the input data has a specific format, and generally does not try to read data
+organized in different formats. If your data is in a completely different format, you should probably write a
+separate script that reorganizes the data in the appropraite format if you want to use the createPlots.py script
+to plot your data.
+
+The createPlots.py script assumes that your data is organized in columns, with each column representing a separate
+generation of an evolutionary run. By default, the plot assumes that the first column holds the generation number,
+and it will thus start by plotting the second column, but this behavior can be changed by providing the to_plot
+option. In addition, the defaults assume that the generations are consecutive. You can change this behavior by
+setting the x_from_file and x_column options.
+
+And example of a properly formatted file would be:
+
+`
+0 0.2
+1 0.4
+2 0.6
+3 0.8
+4 1.0
+`
+
+### Plotting a single file
+To plot data from a single file, simply provide the file you wish to plot as an argument to createPlots.py.
+By default, the script will plot the second column over generations, but the column can be changed by passing the 
+to_plot option.
 
 To test this yourself, cd into the examples directory and type:
 
@@ -35,4 +58,43 @@ To test this yourself, cd into the examples directory and type:
 
 The result should look like this:
 
-![Example plot 2](examples/example_plot_2/example_plot.png "Example plot 1")
+![Example plot 2](examples/example_plot_2/example_plot.png "Example plot 2")
+
+
+### Plotting from a configuration files
+While all plotting script options can be set through the command line, it is often more convenient to use a 
+configuration file. This configuration file holds values for all options you want to pass, and can easily be
+adjusted whenever you want to make a small change to your plot. An example configuration file would be:
+
+`#### General ####
+templates "file.*.dat"
+
+#### Plots ####
+plot_title      "Example plot"
+plot_output     "example_plot_3"
+plot_column     "1"
+plot_y_label    "Performance"
+plot_y_min      "0.0"
+plot_y_max      "1.0"
+plot_legend_loc "upper left"
+x_from_file     "True"
+x_column        "0"
+
+#### Treatments ####
+treatment_name   "Treatment 1"
+treatment_dir    "treatment1"
+treatment_color  "#008200"
+treatment_marker "o"
+
+treatment_name   "Treatment 2"
+treatment_dir    "treatment2"
+treatment_color  "#000082"
+treatment_marker "s"`
+
+Once you have such a configuration file, and let's say it is named `exampleConfig.txt`, you can load with:
+
+`createPlots.py -c exampleConfig.txt`
+
+Running this command in the examples folder should give you a plot that looks like this:
+
+![Example plot 3](examples/example_plot_3/example_plot.png "Example plot 3")

@@ -1,5 +1,5 @@
 __author__ = 'Joost Huizinga'
-__version__ = '1.0'
+__version__ = '1.1'
 import sys
 import os.path
 import re
@@ -319,6 +319,8 @@ def get_files(templates, starting_directory="."):
             for filename in os.listdir(directory):
                 path = directory + "/" + filename
                 match = re.match(template, filename)
+                debug_print("files", "template:", template,
+                            "File:", filename, "match:", match)
                 if os.path.isdir(path) and match:
                     next_directories.append(path)
                 if os.path.isfile(path) and match and i+1 == len(templates):

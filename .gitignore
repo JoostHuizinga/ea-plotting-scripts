@@ -105,3 +105,6 @@ ENV/
 
 # Mac store
 .DS_Store
+
+# Plotting script cache files
+*.cache
