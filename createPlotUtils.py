@@ -1,5 +1,5 @@
 __author__ = 'Joost Huizinga'
-__version__ = '1.1'
+__version__ = '1.2'
 import sys
 import os.path
 import re
@@ -39,6 +39,8 @@ global_parser = ap.ArgumentParser()
 
 
 def initOptions(description, usage):
+    global_parser.add_argument('-v', '--version', action='version',
+                               version='%(prog)s ' + __version__)
     global_parser.add_argument('-c', '--config_file', nargs='?', type=str,
                                help='Gets all options from the provided config file.')
     global_parser.add_argument("--debug", type=str, nargs='+',
