@@ -1,5 +1,5 @@
 __author__ = 'Joost Huizinga'
-__version__ = '1.2'
+__version__ = '1.3'
 import sys
 import os.path
 import re

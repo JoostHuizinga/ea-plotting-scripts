@@ -108,7 +108,7 @@ addOption("bootstrap", False, nargs=1,
           help="If true, the shaded area will be based on bootstrapped "
           "confidence intervals. Otherwise the shaded area represents the "
           "inter-quartile range.")
-addOption("smoothing", 11, nargs=1,
+addOption("smoothing", 1, nargs=1,
           help="Applies a median window of the provided size to smooth the "
           "line plot.")
 addOption("main_treatment", 0, nargs=1,
@@ -578,6 +578,7 @@ class DataSingleTreatment:
                     if line_number % cache_step == 0:
                         generation = generations_to_plot[data_point_number]
                         split_line = line.split()
+                        debug_print("data", split_line)
                         if len(split_line) == 3:
                             self.median_and_ci[plot_id].add(generation,
                                                             split_line[0],
