@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+__version__="1.1 (Feb. 15 2018)"
+__author__="Joost Huizinga"
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -11,7 +13,8 @@ import argparse as ap
 from createPlotUtils import *
 
 initOptions("Script for creating line-plots.",
-            "[input_directories [input_directories ...]] [OPTIONS]")
+            "[input_directories [input_directories ...]] [OPTIONS]",
+            __version__)
 
 #Constants
 MAX_GEN_NOT_PROVIDED = -1
@@ -138,7 +141,7 @@ addOption("one_value_per_dir", False, nargs=1,
           "to be plotted sequentially.")
 addOption("comparison_offset_x", 0, nargs=1,
           help="Allows moving the labels next the significance indicator box.")
-addOption("comparison_offset_y", 0.1, nargs=1,
+addOption("comparison_offset_y", 0, nargs=1,
           help="Allows moving the labels next the significance indicator box.")
 addOption("sig_label", "p<0.05 vs ", nargs=1,
           help="Label next to the significance indicator box.")
@@ -221,6 +224,10 @@ addOption("background_colors",  def_background_colors,
 addOption("marker",
           ["o", "^", "v", "<", ">", "*"],
           aliases=["treatment_marker"],
+          help="The marker used for each treatment.")
+addOption("linestyle",
+          ["-"],
+          aliases=["treatment_linestyle"],
           help="The marker used for each treatment.")
 addOption("sig_marker", def_sig_marker,
           help="The marker used in the signficance indicator box.")
@@ -898,7 +905,14 @@ def getMarker(compare_to_symbol):
     except ValueError:
         print "Warning: invalid significance marker, marker replaced with *."
         sig_marker = "*"
-    return sig_marker 
+    return sig_marker
+
+def getLinestyle(compare_to_symbol):
+    linestyle = getStr("linestyle", compare_to_symbol)
+    if linestyle not in ['-', '--', '-.', ':']:
+        print "Warning: invalid significance marker, marker replaced with -."
+        linestyle = "-"
+    return linestyle 
 
 def getFgColor(compare_to_symbol):
     color = getStr("colors", compare_to_symbol)
@@ -941,6 +955,7 @@ def plot_treatment(plot_id, treatment, data_of_interest):
     mean_and_ci = treatment_data.get_median_and_ci(plot_id)
 
     marker = getMarker(treatment_index)
+    linestyle = getLinestyle(treatment_index)
     marker_size = getFloat("marker_size")
     marker_offset = getInt("marker_offset", treatment_index)
     color = getFgColor(treatment_index)
@@ -1009,7 +1024,7 @@ def plot_treatment(plot_id, treatment, data_of_interest):
 
     #The actual median
     plt.plot(data_step_x, plot_mean, color=color, linewidth=LINE_WIDTH,
-             linestyle="-")
+             linestyle=linestyle)
 
     #Fill confidence interval
     plt.fill_between(data_step_x, var_min, var_max, edgecolor=bg_color,
@@ -1025,7 +1040,7 @@ def plot_treatment(plot_id, treatment, data_of_interest):
     #Markers used in the legend
     #To plot the legend markers, plot a point completely outside of the plot.
     plt.plot([data_step_x[0] - max_generation], [0], color=color,
-             linewidth=LINE_WIDTH, linestyle="-", marker=marker,
+             linewidth=LINE_WIDTH, linestyle=linestyle, marker=marker,
              label=treatment_name, markersize=marker_size)
 
 
@@ -1055,11 +1070,19 @@ def plot_significance(gs, data_intr):
         ax.set_ylabel(lbl,
                       rotation='horizontal',
                       fontsize=getInt("tick_font_size"),
-                      horizontalalignment='right')
-        #lbl_x = (-bb.width/1200.0) + getFloat("comparison_offset_x")
-        #lbl_x = 0
-        ax.get_yaxis().set_label_coords(getFloat("comparison_offset_x"),
-                                        getFloat("comparison_offset_y"))
+                      horizontalalignment='right',
+                      verticalalignment='center')
+
+        # Sets the position of the p<0.05 label
+        # While the y coordinate can be set directly with set_position, the x
+        # coordinate passed to this method is ignored by default. So instead,
+        # the labelpad is used to modify the x coordinate (and, as you may
+        # expect, there is no labelpad for the y coordinate, hence the two
+        # different methods for applying the offset).
+        x, y = ax.get_yaxis().label.get_position()
+        ax.get_yaxis().labelpad += getFloat("comparison_offset_x")
+        ax.get_yaxis().label.set_position((0, y - getFloat("comparison_offset_y")))
+        
         ax.set_xlabel(getStrDefaultFirst("x_labels", i))
         ax.tick_params(bottom=True, top=False)
         odd = True

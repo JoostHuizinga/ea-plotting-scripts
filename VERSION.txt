@@ -1,0 +1,23 @@
+######################
+### createPlots.py ###
+######################
+
+Current version: 1.1
+Last updated on: Feb 15 2018
+
+Changes for version 1.1
+=======================
+- Linestyle can now be set for each treatment.
+- Better default positioning for the label next to the significance indicator box.
+
+
+######################
+# createPlotUtils.py #
+######################
+
+Current version: 1.4
+Last updated on: Feb 15 2018
+
+Changes for version 1.4
+=======================
+- The --version option now prints the version number of both the invoked tool, and the plot utilities.

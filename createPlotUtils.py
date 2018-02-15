@@ -1,5 +1,5 @@
 __author__ = 'Joost Huizinga'
-__version__ = '1.3'
+__version__ = '1.4 (Feb. 15 2018)'
 import sys
 import os.path
 import re
@@ -29,7 +29,6 @@ class InputError(Error):
         self.msg = msg
 
 
-
 ###################
 ## GLOBAL OPTIONS #
 ###################
@@ -38,9 +37,10 @@ global_alias = {}
 global_parser = ap.ArgumentParser()
 
 
-def initOptions(description, usage):
+def initOptions(description, usage, version):
+    global_parser.version = version + "\ncreatePlotUtils.py: " + __version__
     global_parser.add_argument('-v', '--version', action='version',
-                               version='%(prog)s ' + __version__)
+                               version='%(prog)s ' + global_parser.version)
     global_parser.add_argument('-c', '--config_file', nargs='?', type=str,
                                help='Gets all options from the provided config file.')
     global_parser.add_argument("--debug", type=str, nargs='+',
@@ -49,7 +49,7 @@ def initOptions(description, usage):
                                help='Turns warnings into errors, so you get a stack trace.')
     global_parser.description = description
     global_parser.usage = sys.argv[0] + " " + usage
-    global_parser.version = __version__
+    
 
 def addOption(name, value = [], nargs='+', aliases=[], help=""):
     if not isinstance(value, list) and not hasattr(value, '__call__'):
@@ -321,8 +321,6 @@ def get_files(templates, starting_directory="."):
             for filename in os.listdir(directory):
                 path = directory + "/" + filename
                 match = re.match(template, filename)
-                debug_print("files", "template:", template,
-                            "File:", filename, "match:", match)
                 if os.path.isdir(path) and match:
                     next_directories.append(path)
                 if os.path.isfile(path) and match and i+1 == len(templates):
