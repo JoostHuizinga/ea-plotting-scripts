@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-__version__="1.1 (Feb. 15 2018)"
+__version__="1.2 (Feb. 16 2018)"
 __author__="Joost Huizinga"
 import matplotlib
 import matplotlib.pyplot as plt
@@ -16,13 +16,19 @@ initOptions("Script for creating line-plots.",
             "[input_directories [input_directories ...]] [OPTIONS]",
             __version__)
 
-#Constants
+# Constants
 MAX_GEN_NOT_PROVIDED = -1
 NO_LINE = 0
 LINE_WIDTH = 2
 FILL_ALPHA = 0.5
 
-#Derived defaults
+# Global variables
+# At some point we may want to create an object to hold all global plot settings
+# (or a local object that is passed to all relevant functions)
+# but for now this list is all we need.
+extra_artists=[]
+
+# Derived defaults
 def def_output_dir():
     if getExists("config_file"):
         return base(getStr("config_file")) + "_out"
@@ -139,14 +145,35 @@ addOption("x_ticks",
 addOption("one_value_per_dir", False, nargs=1,
           help="If true, assumes that every file found holds a single value, "
           "to be plotted sequentially.")
-addOption("comparison_offset_x", 0, nargs=1,
-          help="Allows moving the labels next the significance indicator box.")
-addOption("comparison_offset_y", 0, nargs=1,
-          help="Allows moving the labels next the significance indicator box.")
-addOption("sig_label", "p<0.05 vs ", nargs=1,
-          help="Label next to the significance indicator box.")
 addOption("type", "pdf", nargs=1,
           help="The file type in which the plot will be written.")
+
+# Significance bar settings
+addOption("comparison_offset_x", 0, nargs=1, aliases=["sig_lbl_x_offset"],
+          help="Allows moving the label next the significance indicator box.")
+addOption("comparison_offset_y", 0, nargs=1, aliases=["sig_lbl_y_offset"],
+          help="Allows moving the label next the significance indicator box.")
+addOption("sig_label", "p<0.05 vs ", nargs=1, aliases=["sig_lbl"],
+          help="Label next to the significance indicator box.")
+addOption("sig_treat_lbls_x_offset", 0.005, nargs=1,
+          help="Allows moving the treatment labels next to the "
+          "significance indicator box horizontally.")
+addOption("sig_treat_lbls_y_offset", 0, nargs=1, 
+          help="Allows moving the treatment labels next to the "
+          "significance indicator box vertically.")
+addOption("sig_treat_lbls_rotate", 0, nargs=1, 
+          help="Allows rotating the treatment labels next to the "
+          "significance indicator box.")
+addOption("sig_treat_lbls_symbols", False, nargs=1, 
+          help="Plot symbols instead of names for the treatment labels next to "
+          "the significance indicator box.")
+addOption("sig_treat_lbls_font_size", def_tick_font_size, nargs=1, 
+          help="Font size for the treatment labels next to "
+          "the significance indicator box.")
+addOption("sig_treat_lbls_align", "bottom", nargs=1, 
+          help="Alignment for the treatment labels next to the significance "
+          "indicator box. Possible values are: 'top', 'bottom', and 'center'.")
+
 
 #Font settings
 addOption("sig", True, nargs=1)
@@ -190,7 +217,7 @@ addOption("x_axis_max", aliases=["plot_x_max"],
 addOption("x_axis_min", aliases=["plot_x_min"],
           help="The maximum value for the x axis.")
 
-#Cache settings
+# Cache settings
 addOption("read_cache", True, nargs=1,
           help="If false, script will not attempt to read data from cache.")
 addOption("write_cache", True, nargs=1,
@@ -206,7 +233,7 @@ addOption("write_comparison_cache", True, nargs=1,
 addOption("comparison_cache", def_comp_cache, nargs=1,
           help="Name of the cache file that holds statistical results.")
 
-#Per treatment settings
+# Per treatment settings
 addOption("input_directories", aliases=["treatment_dir"],
           help="Directories containing the files for each specific treatment.")
 addOption("treatment_names", def_treatment_names, aliases=["treatment_name"],
@@ -1085,8 +1112,10 @@ def plot_significance(gs, data_intr):
         
         ax.set_xlabel(getStrDefaultFirst("x_labels", i))
         ax.tick_params(bottom=True, top=False)
+        
         odd = True
         ast_height = 0
+        HALF_ROW_HEIGHT=0.5
         for compare_to in xrange(nr_of_treatments-1, -1, -1):
             if compare_to == getInt("main_treatment"):
                 continue
@@ -1096,6 +1125,7 @@ def plot_significance(gs, data_intr):
             sig_marker = getStr("sig_marker", compare_to_symbol)
             color = getStr("colors", compare_to_symbol)
             back_color = getStr("background_colors", compare_to_symbol)
+            treatment = data_intr.get_treatment_list()[compare_to]
 
             try:
                 matplotlib.markers.MarkerStyle(sig_marker)
@@ -1116,8 +1146,8 @@ def plot_significance(gs, data_intr):
                 back_color = "#505050"
 
             #Add the background box
-            pol_top = ast_height+0.5
-            pol_bot = ast_height-0.5
+            pol_top = ast_height+HALF_ROW_HEIGHT
+            pol_bot = ast_height-HALF_ROW_HEIGHT
             box = Polygon([(min_generation, pol_bot),
                            (min_generation, pol_top),
                            (max_generation, pol_top),
@@ -1128,7 +1158,7 @@ def plot_significance(gs, data_intr):
 
             #Add the line separating the treatments
             ax.plot([min_generation, max_generation],
-                    [ast_height-0.5,ast_height-0.5],
+                    [pol_bot, pol_bot],
                     color='black',
                     linestyle='-',
                     linewidth=1.0,
@@ -1142,20 +1172,54 @@ def plot_significance(gs, data_intr):
                         marker=sig_marker,
                         c=color,
                         s=50)
-            if odd:
-                offset = max_generation*1.015
+
+            # Determmine position for treatment labels
+            lbls_x = max_generation*(1.0 + getFloat("sig_treat_lbls_x_offset"))
+            if getStr("sig_treat_lbls_align") == "top":
+                lbls_y = pol_top + getFloat("sig_treat_lbls_y_offset")
+                lbls_v_align = "top"
+            elif getStr("sig_treat_lbls_align") == "bottom":
+                lbls_y = pol_bot + getFloat("sig_treat_lbls_y_offset")
+                lbls_v_align = "bottom"
+            elif getStr("sig_treat_lbls_align") == "center":
+                lbls_y = ast_height + getFloat("sig_treat_lbls_y_offset")
+                lbls_v_align = "center"
             else:
-                offset = max_generation*1.040
-                ax.plot([max_generation, offset],
-                        [ast_height, ast_height],
-                        color='black',
-                        linestyle='-',
-                        linewidth=1.0,
-                        solid_capstyle="projecting",
-                        clip_on=False, 
-                        zorder=90)
-            ax.scatter(offset, ast_height, marker=sig_marker, c=color, s=100,
-                       clip_on=False, zorder=100)
+                raise Exception("Invalid option for 'sig_treat_lbls_align': "
+                                + getStr("sig_treat_lbls_align"))
+            
+            if getBool("sig_treat_lbls_symbols"):
+                # Add symbol markers on the side
+                if  odd:
+                    lbls_x = max_generation*(1.010 +
+                                             getFloat("sig_treat_lbls_x_offset"))
+                else:
+                    lbls_x = max_generation*(1.035 +
+                                             getFloat("sig_treat_lbls_x_offset"))
+                    ax.plot([max_generation, lbls_x],
+                            [lbls_y, lbls_y],
+                            color='black',
+                            linestyle='-',
+                            linewidth=1.0,
+                            solid_capstyle="projecting",
+                            clip_on=False, 
+                            zorder=90)
+                p = ax.scatter(lbls_x, lbls_y, marker=sig_marker, c=color,
+                           s=100, clip_on=False, zorder=100)
+                extra_artists.append(p)
+            else:
+                # Add text on the side
+                an = ax.annotate(treatment.get_name_short(),
+                                 xy=(max_generation, lbls_y),
+                                 xytext=(lbls_x, lbls_y),
+                                 annotation_clip=False,
+                                 verticalalignment=lbls_v_align,
+                                 horizontalalignment='left',
+                                 rotation=getFloat("sig_treat_lbls_rotate"),
+                                 size=getInt("sig_treat_lbls_font_size")
+                )
+                extra_artists.append(an)
+
             odd = not odd
     print("Calculating significance done.")
 
@@ -1244,9 +1308,10 @@ def write_plots():
                         "anchor x:", anchor_x, "anchor y:", anchor_y)
             lgd = ax.legend(loc=loc, ncol=columns,
                             bbox_to_anchor=(anchor_x, anchor_y, 1, 1))
-            if lgd:
+            extra_artists.append(lgd)
+            if len(extra_artists) > 0:
                 plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,
-                            bbox_extra_artists=(lgd,), bbox_inches='tight')
+                            bbox_extra_artists=(extra_artists), bbox_inches='tight')
             else:
                 print "Warning: insufficient data to create legend."
                 plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,

@@ -2,8 +2,22 @@
 ### createPlots.py ###
 ######################
 
-Current version: 1.1
-Last updated on: Feb 15 2018
+Current version: 1.2
+Last updated on: Feb 16 2018
+
+Changes for version 1.2
+=======================
+Added customization options for the treatment names next to the significance indicator box. New options are:
+- sig_treat_lbls_x_offset: Moves labels horizontally.
+- sig_treat_lbls_y_offset: Moves labels vertically.
+- sig_treat_lbls_rotate: Rotates labels.
+- sig_treat_lbls_symbols: Shows symbols in stead on labels (old style).
+- sig_treat_lbls_font_size: Changes the fontsize of the labels.
+- sig_treat_lbls_align: Changes the alignment of the labels.
+
+The sig_treat_lbls_align option is to be used in combination with the rotate option. If rotate upwards (positive angle), you want the alignment to be bottom.
+If rotate downwards (negative angle), you want the alignment to be top.
+
 
 Changes for version 1.1
 =======================
