@@ -1,5 +1,5 @@
 __author__ = 'Joost Huizinga'
-__version__ = '1.4 (Feb. 15 2018)'
+__version__ = '1.5 (Mar. 8 2018)'
 import sys
 import os.path
 import re
@@ -95,11 +95,31 @@ def getInt(name, index=0):
     return result
 
 
+def getIntDefNone(name, index=0):
+    result = None
+    if index < len(global_options[name]):
+        result = int(global_options[name][index])
+    return result
+
+
 def getFloat(name, index=0):
     result = 0.0
     if index < len(global_options[name]):
         result = float(global_options[name][index])
     return result
+
+
+def getFloatDefFirst(name, index=0):
+    result=None
+    if len(global_options[name]) > 0:
+        result = global_options[name][0]
+    if index < len(global_options[name]):
+        result = float(global_options[name][index])
+    return result
+
+
+def getFloatList(name):
+    return list(map(float, global_options[name]))
 
 
 def getFloatPair(name):
@@ -112,6 +132,7 @@ def getList(name):
 
 def get(name):
     return global_options[name]
+
 
 def getIntList(name):
     return list(map(int, global_options[name]))
@@ -128,6 +149,18 @@ def getStr(name, index=0):
             result = str(global_options[name][index])
     else:
         result = None
+    #print "String:", result, type(result)
+    return result
+
+
+def getStrDefaultEmpty(name, index=0):
+    result = ""
+    if name in global_options:
+        if index < len(global_options[name]):
+            result = str(global_options[name][index])
+    else:
+        result = None
+    #print "String:", result, type(result)
     return result
 
 
@@ -539,3 +572,27 @@ def latex_available():
         return False
     else:
         return True
+
+
+def get_treatment_index(treatment_id, data_intr):
+        try:
+            return int(treatment_id)
+        except ValueError:
+            pass
+        try:
+            return data_intr.get_treatment_index(treatment_id)
+        except KeyError:
+            print("ERROR: Treatment not found: '" + treatment_id +"'")
+        return None
+
+    
+def parse_treatment_ids(other_treatments, data_intr):
+    if not other_treatments:
+        return []
+    other_treatments = other_treatments.split(",")
+    resolved_treatments = []
+    for treatment_id in other_treatments:
+        treatment_i = get_treatment_index(treatment_id, data_intr)
+        if treatment_i is not None:
+            resolved_treatments.append(treatment_i)
+    return resolved_treatments

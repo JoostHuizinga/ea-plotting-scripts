@@ -29,8 +29,14 @@ Changes for version 1.1
 # createPlotUtils.py #
 ######################
 
-Current version: 1.4
-Last updated on: Feb 15 2018
+Current version: 1.5
+Last updated on: Mar 8 2018
+
+Changes for version 1.5
+=======================
+- Added the get_treatment_index and parse_treatment_ids helpers functions for referring to treatments by their name, rather than there index.
+- Added a couple of additional getter functions for the global options, such as: getFloatDefFirst, getIntDefNone, and getFloatList. Planning a refactor of these functions, as we have a few too many at this point.
+
 
 Changes for version 1.4
 =======================
