@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-__version__="1.2 (Feb. 16 2018)"
 __author__="Joost Huizinga"
+__version__="1.3 (Mar. 8 2018)"
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -71,24 +71,22 @@ def def_treatment_names():
     else:
         return [os.path.basename(x) for x in getList("file")]
 def def_treatment_names_short(): return getList("treatment_names")
-def def_background_colors(): 
-    result = []
-    colors = getList("colors")
-    for color in colors:
-        byte = ""
-        new_color = "#"
-        for char in color:
-            if char == '#':
-                continue
-            byte += char
-            if len(byte) == 2:
-                byte_as_int = int(byte, 16)
-                new_value = min(byte_as_int+128, 255)
-                new_value_as_string = "%x" % new_value
-                new_color += new_value_as_string
-                byte = ""
-        result.append(new_color)
-    return result
+def def_bg_color(color):
+    byte = ""
+    new_color = "#"
+    for char in color:
+        if char == '#':
+            continue
+        byte += char
+        if len(byte) == 2:
+            byte_as_int = int(byte, 16)
+            new_value = min(byte_as_int+128, 255)
+            new_value_as_string = "%x" % new_value
+            new_color += new_value_as_string
+            byte = ""
+    return new_color
+def def_background_colors():
+    return [def_bg_color(color) for color in getList("colors")]
             
 
 #Directory settings
@@ -120,10 +118,6 @@ addOption("bootstrap", False, nargs=1,
 addOption("smoothing", 1, nargs=1,
           help="Applies a median window of the provided size to smooth the "
           "line plot.")
-addOption("main_treatment", 0, nargs=1,
-          help="Statistical comparisons are performed against this treatment.")
-addOption("box_height", def_box_height, nargs=1,
-          help="The height of the box showing significance indicators.")
 addOption("box_sep", 0, nargs=1,
           help="Space between significance box and the main plot.")
 addOption("fig_size", [8, 6], nargs=2,
@@ -148,7 +142,7 @@ addOption("one_value_per_dir", False, nargs=1,
 addOption("type", "pdf", nargs=1,
           help="The file type in which the plot will be written.")
 
-# Significance bar settings
+# General significance bar settings
 addOption("comparison_offset_x", 0, nargs=1, aliases=["sig_lbl_x_offset"],
           help="Allows moving the label next the significance indicator box.")
 addOption("comparison_offset_y", 0, nargs=1, aliases=["sig_lbl_y_offset"],
@@ -174,6 +168,13 @@ addOption("sig_treat_lbls_align", "bottom", nargs=1,
           help="Alignment for the treatment labels next to the significance "
           "indicator box. Possible values are: 'top', 'bottom', and 'center'.")
 
+# Per comparison settings
+addOption("comparison_main", 0, aliases=["main_treatment"],
+          help="Statistical comparisons are performed against this treatment.")
+addOption("comparison_others", "",
+          help="Statistical comparisons are performed against this treatment.")
+addOption("comparison_height", def_box_height, aliases=["box_height"],
+          help="The height of the box showing significance indicators.")
 
 #Font settings
 addOption("sig", True, nargs=1)
@@ -247,6 +248,7 @@ addOption("colors",
           aliases=["treatment_color"],
           help="The color for each treatment.")
 addOption("background_colors",  def_background_colors,
+          aliases=["treatment_bgcolor"],
           help="The color of the shaded region, for each treatment.")
 addOption("marker",
           ["o", "^", "v", "<", ">", "*"],
@@ -720,28 +722,45 @@ class DataOfInterest:
     def __init__(self, treatment_list):
         self.treatment_list = treatment_list
         self.treatment_data = dict()
+        self.treatment_name_cache = dict()
         self.comparison_cache = None
         self.max_generation = None
 
+        
+    def get_treatment_index(self, treatment_name):
+        if treatment_name in self.treatment_name_cache:
+            return self.treatment_name_cache[treatment_name]
+        else:
+            for tr in self.treatment_list:
+                self.treatment_name_cache[tr.get_name()] = tr.get_id()
+                self.treatment_name_cache[tr.get_name_short()] = tr.get_id()
+            return self.treatment_name_cache[treatment_name]
+
+        
     def get_treatment_list(self):
         return self.treatment_list
 
+    
     def get_treatment(self, treatment_id):
         return self.treatment_list[treatment_id]
 
+    
     def get_treatment_data(self, treatment):
         treatment_id = treatment.get_id()
         if treatment_id not in self.treatment_data:
             self.treatment_data[treatment_id] = DataSingleTreatment(self.treatment_list[treatment_id])
         return self.treatment_data[treatment_id]
 
+    
     def get_max_generation(self):
         if not self.max_generation:
             self.init_max_generation()
         return self.max_generation
 
+    
     def get_min_generation(self):
         return 0
+
     
     def get_x_values(self, treatment, plot_id):
         #Read global data
@@ -758,26 +777,27 @@ class DataOfInterest:
             return range(0, len(med_ci.median)*getInt("step"), getInt("step"))
             
 
-    def get_comparison(self, treatment_id_1, treatment_id_2):
+    def get_comparison(self, treatment_id_1, treatment_id_2, plot_id):
         if not self.comparison_cache:
             self.init_compare()
-        if (treatment_id_1, treatment_id_2) not in self.comparison_cache:
-            print("Error: no comparison entry for values" +
-                  str((treatment_id_1, treatment_id_2)))
+        key = (treatment_id_1, treatment_id_2, plot_id)
+        if key not in self.comparison_cache:
+            print("Error: no comparison entry for values" + str(key))
+            print("Cache:", self.comparison_cache)
             return []
-        return self.comparison_cache[(treatment_id_1, treatment_id_2)]
+        return self.comparison_cache[key]
 
+    
     def to_cache(self):
-        #Read global data
+        # Read global data
         cache_file_name = getStr("comparison_cache")
-        main_treatment_id = getInt("main_treatment")
         stat_test_step = getInt("stat_test_step")
-
+        
         with open(cache_file_name, 'w') as cache_file:
             print ("Writing " + cache_file_name + "...")
             for entry in self.comparison_cache.iteritems():
                 key, generations = entry
-                other_treatment_id, plot_id = key
+                main_treatment_id, other_treatment_id, plot_id = key
                 cache_file.write(str(plot_id) + " ")
                 cache_file.write(str(main_treatment_id) + " ")
                 cache_file.write(str(other_treatment_id) + " ")
@@ -786,6 +806,7 @@ class DataOfInterest:
                     cache_file.write(str(generation) + " ")
                 cache_file.write("\n")
 
+                
     def init_max_generation(self):
         #Read global data
         self.max_generation = getInt("max_generation")
@@ -797,6 +818,7 @@ class DataOfInterest:
                 if treatment_data.get_max_generation() > self.max_generation:
                     self.max_generation = treatment_data.get_max_generation()
 
+                    
     def init_compare(self):
         #Read global data
         read_cache = getBool("read_cache") and getBool("read_comparison_cache")
@@ -812,110 +834,123 @@ class DataOfInterest:
                 pass
         self.init_compare_from_data()
 
+        
     def init_compare_from_cache(self):
-        #Read global data
-        plot_ids = getIntList("to_plot")
-        comparison_cache_file_name = getStr("comparison_cache")
-        main_treatment_id = getInt("main_treatment")
+        # Read global data
+        comp_cache_name = getStr("comparison_cache")
         stat_test_step = getInt("stat_test_step")
 
-        with open(comparison_cache_file_name, 'r') as cache_file:
-            print("Reading from comparison cache " +
-                  comparison_cache_file_name + "...")
-
-            #Read data from file
+        # Actually read the cache file
+        with open(comp_cache_name, 'r') as cache_file:
+            print("Reading from comparison cache "+comp_cache_name+"...")
             for line in cache_file:
                 numbers = line.split()
                 if len(numbers) < 4:
-                    raise CacheException("Entry does not have the right amount "
-                                         "of numbers")
+                    raise CacheException("Entry is to short.")
                 plot_id_cache = int(numbers[0])
-                main_treatment_id_cache = int(numbers[1])
-                other_treatment_id_cache = int(numbers[2])
+                main_treat_id_cache = int(numbers[1])
+                other_treat_id_cache = int(numbers[2])
                 stat_test_step_cache = int(numbers[3])
-                if main_treatment_id != main_treatment_id_cache:
-                    raise CacheException("Main treatment changed")
                 if stat_test_step != stat_test_step_cache:
                     raise CacheException("Cache created with different step")
-                key = (other_treatment_id_cache, plot_id_cache)
+                key = (main_treat_id_cache, other_treat_id_cache, plot_id_cache)
                 self.comparison_cache.init_key(key)
                 for i in xrange(4, len(numbers)):
                     self.comparison_cache.add(key, int(numbers[i]))
+        self.verify_cache()
 
-        for plot_id in plot_ids:
-            for other_treatment in self.treatment_list:
-                other_treatment_id = other_treatment.get_id()
-                key = (other_treatment_id, plot_id)
-                if other_treatment_id == main_treatment_id:
-                    continue
-                if key not in self.comparison_cache:
-                    raise CacheException("Cache does not hold entries for all "
-                                         "treatments")
-
-    def init_compare_from_data(self):
-        #Get global data
+                    
+    def verify_cache(self):
+        # Verify that all data is there
         plot_ids = getIntList("to_plot")
-        main_treatment_id = getInt("main_treatment")
-        stat_test_step = getInt("stat_test_step")
+        for plot_id in plot_ids:
+            for compare_i in xrange(len(getList("comparison_main"))):
+                main_treat_id = getStr("comparison_main", compare_i)
+                main_treat_i = get_treatment_index(main_treat_id, self)
+                for other_treat_i in get_other_treatments(compare_i, self):
+                    key = (main_treat_i, other_treat_i, plot_id)
+                    if key not in self.comparison_cache:
+                        raise CacheException("Cache is missing an entry.")
+                                                
+                
+    def init_compare_from_data(self):
+        # Get global data
+        plot_ids = getIntList("to_plot")
         write_cache = (getBool("write_cache") and
                        getBool("write_comparison_cache"))
 
-        #Get main treatment
-        main_treatment = self.treatment_list[main_treatment_id]
-
-        #Compare data for all plots and all treatments
-        main_data = self.get_treatment_data(main_treatment).get_raw_data()
+        # Compare data for all plots and all treatments
         for plot_id in plot_ids:
-            if plot_id not in main_data:
-                print("Warning: no data available for plot", plot_id,
-                      "treatment", main_treatment.get_name(), ", skipping...")
-                continue
-
-            for other_treat in self.treatment_list:
-                other_data = self.get_treatment_data(other_treat).get_raw_data()
-                other_treatment_id = other_treat.get_id()
-                key = (other_treatment_id, plot_id)
-                if other_treatment_id == main_treatment_id:
-                    continue
-                self.comparison_cache.init_key(key)
-                debug_print("cache", "Comparing: " + str(other_treatment_id) +
-                            " with " + str(main_treatment_id))
-
-                if plot_id not in other_data:
-                    print("Warning: no data available for plot", plot_id,
-                          "treatment", other_treat.get_name(),
-                          ", skipping...")
-                    continue
-
-                max_generation = self.get_max_generation()
-                max_gen_main = main_data.get_max_generation(plot_id)
-                max_gen_other = other_data.get_max_generation(plot_id)
-                max_generation_available = min(max_gen_main, max_gen_other)
-                                                               
-                if max_generation_available < max_generation:
-                    print ("Warning: data does extent until max generation: " +
-                           str(max_generation))
-                    print ("Maximum generation available is: " +
-                           str(max_generation_available))
-                    max_generation = max_generation_available
-
-                main_gen = set(main_data[plot_id].keys())
-                other_gen = set(other_data[plot_id].keys())
-                generations = list(main_gen.intersection(other_gen))
-                generations.sort()
-                for generation in generations[::stat_test_step]:
-                    data1 = main_data[plot_id][generation]
-                    data2 = other_data[plot_id][generation]
-                    p_value = mann_whitney_u(data1, data2)
-                    print "Generation:", generation, "p-value:", p_value, "mean 1:", np.mean(data1), "mean 2:", np.mean(data2)
-                    if p_value < 0.05:
-                        self.comparison_cache.add(key, generation)
+            for compare_i in xrange(len(getList("comparison_main"))):
+                main_treat_id = getStr("comparison_main", compare_i)
+                main_treat_i = get_treatment_index(main_treat_id, self)
+                for other_treat_i in get_other_treatments(compare_i, self):
+                    self.compare_treat(main_treat_i, other_treat_i, plot_id)
         if write_cache:
             self.to_cache()
 
+
+    def compare_treat(self, main_treat_i, other_treat_i, plot_id):
+        debug_print("cache", "Comparing: ", other_treat_i, " : ", main_treat_i)
+        
+        # Retrieve data
+        stat_test_step = getInt("stat_test_step")
+        main_treat = self.treatment_list[main_treat_i]
+        main_data = self.get_treatment_data(main_treat).get_raw_data()
+        other_treat = self.treatment_list[other_treat_i]
+        other_data = self.get_treatment_data(other_treat).get_raw_data()
+
+        # Assert that data is available
+        if plot_id not in main_data:
+            warn_data_avail(plot_id, main_treat)
+            return
+        if plot_id not in other_data:
+            warn_data_avail(plot_id, other_treat)
+            return
+        warn_max_gen(self, main_data, other_data, plot_id)
+
+        # Construct a key and add it to the cache
+        key = (main_treat_i, other_treat_i, plot_id)
+        self.comparison_cache.init_key(key)
+
+        # Gather all generations for which we have data for both treatments
+        main_gen = set(main_data[plot_id].keys())
+        other_gen = set(other_data[plot_id].keys())
+        generations = list(main_gen.intersection(other_gen))
+        generations.sort()
+
+        # Perform the actual statistical test
+        for generation in generations[::stat_test_step]:
+            data1 = main_data[plot_id][generation]
+            data2 = other_data[plot_id][generation]
+            p_value = mann_whitney_u(data1, data2)
+            print("Generation:", generation,
+                  "p-value:", p_value,
+                  "mean 1:", np.mean(data1),
+                  "mean 2:", np.mean(data2))
+            if p_value < 0.05:
+                self.comparison_cache.add(key, generation)
+
+            
 ######################
 ## HELPER FUNCTIONS ##
 ######################
+def warn_data_avail(plot_id, treatment):
+    print("Warning: no data available for plot", plot_id,
+          "treatment", treatment.get_name(), ", skipping...")
+
+def warn_max_gen(data_intr, main_data, other_data, plot_id):
+    # Determine max generation for this comparison
+    max_gen = data_intr.get_max_generation()
+    max_gen_main = main_data.get_max_generation(plot_id)
+    max_gen_other = other_data.get_max_generation(plot_id)
+    max_gen_avail = min(max_gen_main, max_gen_other)
+    if max_gen_avail < max_gen:
+        print("Warning: data does extent until max generation: " + str(max_gen))
+        print("Maximum generation available is: " + str(max_gen_avail))
+        max_gen = max_gen_avail
+    return max_gen
+
 def getSigMarker(compare_to_symbol):
     sig_marker = getStr("sig_marker", compare_to_symbol)
     try:
@@ -952,12 +987,27 @@ def getFgColor(compare_to_symbol):
 
 def getBgColor(compare_to_symbol):
     back_color = getStr("background_colors", compare_to_symbol)
+    if back_color == "default":
+        fore_color = getStr("colors", compare_to_symbol)
+        back_color = def_bg_color(fore_color)
     try: 
         matplotlib.colors.colorConverter.to_rgb(back_color)
     except ValueError:
         print "Warning: invalid background color, color replaced with grey."
         back_color = "#505050"
     return back_color
+
+
+def get_other_treatments(compare_i, data_intr):
+    main_treat_id = getStr("comparison_main", compare_i)
+    main_treat_i = get_treatment_index(main_treat_id, data_intr)
+    nr_of_treatments = len(data_intr.get_treatment_list())
+    other_treatment_ids = getStrDefaultEmpty("comparison_others", compare_i)
+    other_treatments = parse_treatment_ids(other_treatment_ids, data_intr)
+    if len(other_treatments) == 0:
+        other_treatments = range(nr_of_treatments-1, -1, -1)
+        other_treatments.remove(main_treat_i)
+    return other_treatments
 
 
 ######################
@@ -1069,158 +1119,145 @@ def plot_treatment(plot_id, treatment, data_of_interest):
     plt.plot([data_step_x[0] - max_generation], [0], color=color,
              linewidth=LINE_WIDTH, linestyle=linestyle, marker=marker,
              label=treatment_name, markersize=marker_size)
-
-
-
-def plot_significance(gs, data_intr):
+    
+    
+def add_significance_bar(i, gs, data_intr, bar_nr):
+    ROW_HEIGHT = 1.0
+    HALF_ROW_HEIGHT = ROW_HEIGHT/2.0
+    
+    
     max_generation = data_intr.get_max_generation()
     min_generation = data_intr.get_min_generation()
-    nr_of_treatments = len(data_intr.get_treatment_list())
-    main_treatment = data_intr.get_treatment_list()[getInt("main_treatment")]
+    main_treat_id = getStr("comparison_main", bar_nr)
+    main_treat_i = get_treatment_index(main_treat_id, data_intr)
+    main_treat = data_intr.get_treatment_list()[main_treat_i]
+    other_treats = get_other_treatments(bar_nr, data_intr)
+    plot_id = getInt("to_plot", i)
+    
+    print("  Calculating significance for plot: " + str(i))
+    sig_label = getStr("sig_label")
+    sig_label = sig_label.replace('\\n', '\n')
+    lbl = sig_label + main_treat.get_name_short()
+    ax = plt.subplot(gs[1+bar_nr])
+    ax.set_xlim(0, max_generation)
+    ax.get_yaxis().set_ticks([])
+    ax.set_ylim(0, len(other_treats)*ROW_HEIGHT)
+    ax.set_ylabel(lbl,
+                  rotation='horizontal',
+                  fontsize=getInt("tick_font_size"),
+                  horizontalalignment='right',
+                  verticalalignment='center')
 
+    # Sets the position of the p<0.05 label
+    # While the y coordinate can be set directly with set_position, the x
+    # coordinate passed to this method is ignored by default. So instead,
+    # the labelpad is used to modify the x coordinate (and, as you may
+    # expect, there is no labelpad for the y coordinate, hence the two
+    # different methods for applying the offset).
+    x, y = ax.get_yaxis().label.get_position()
+    ax.get_yaxis().labelpad += getFloat("comparison_offset_x")
+    ax.get_yaxis().label.set_position((0, y - getFloat("comparison_offset_y")))
+    ax.tick_params(bottom=True, top=False)
+
+    if bar_nr == (len(getList("comparison_main")) -1):
+        ax.set_xlabel(getStrDefaultFirst("x_labels", i))
+    else:
+        ax.set_xlabel("")
+        ax.set_xticks([])
+
+    odd = True
+    row_center = HALF_ROW_HEIGHT
+    for other_treat_i in other_treats:
+        sig_marker = getSigMarker(other_treat_i)
+        color = getFgColor(other_treat_i)
+        back_color = getBgColor(other_treat_i)
+        other_treat = data_intr.get_treatment_list()[other_treat_i]
+
+
+        #Add the background box
+        row_top = row_center + HALF_ROW_HEIGHT
+        row_bot = row_center - HALF_ROW_HEIGHT
+        box = Polygon([(min_generation, row_bot),
+                       (min_generation, row_top),
+                       (max_generation, row_top),
+                       (max_generation, row_bot)],
+                      facecolor=back_color,
+                      zorder=-100)
+        ax.add_patch(box)
+
+        #Add the line separating the treatments
+        ax.plot([min_generation, max_generation],
+                [row_bot, row_bot],
+                color='black',
+                linestyle='-',
+                linewidth=1.0,
+                solid_capstyle="projecting")
+
+        comp = data_intr.get_comparison(main_treat_i, other_treat_i, plot_id)
+        for index in comp:
+            ax.scatter(index,
+                       row_center,
+                       marker=sig_marker,
+                       c=color,
+                       s=50)
+
+        # Determmine position for treatment labels
+        lbls_x = max_generation*(1.0 + getFloat("sig_treat_lbls_x_offset"))
+        if getStr("sig_treat_lbls_align") == "top":
+            lbls_y = row_top + getFloat("sig_treat_lbls_y_offset")
+            lbls_v_align = "top"
+        elif getStr("sig_treat_lbls_align") == "bottom":
+            lbls_y = row_bot + getFloat("sig_treat_lbls_y_offset")
+            lbls_v_align = "bottom"
+        elif getStr("sig_treat_lbls_align") == "center":
+            lbls_y = row_center + getFloat("sig_treat_lbls_y_offset")
+            lbls_v_align = "center"
+        else:
+            raise Exception("Invalid option for 'sig_treat_lbls_align': "
+                            + getStr("sig_treat_lbls_align"))
+
+        if getBool("sig_treat_lbls_symbols"):
+            # Add symbol markers on the side
+            if  odd:
+                lbls_x = max_generation*(1.010 +
+                                         getFloat("sig_treat_lbls_x_offset"))
+            else:
+                lbls_x = max_generation*(1.035 +
+                                         getFloat("sig_treat_lbls_x_offset"))
+                ax.plot([max_generation, lbls_x],
+                        [lbls_y, lbls_y],
+                        color='black',
+                        linestyle='-',
+                        linewidth=1.0,
+                        solid_capstyle="projecting",
+                        clip_on=False, 
+                        zorder=90)
+            p = ax.scatter(lbls_x, lbls_y, marker=sig_marker, c=color,
+                       s=100, clip_on=False, zorder=100)
+            extra_artists.append(p)
+        else:
+            # Add text on the side
+            an = ax.annotate(other_treat.get_name_short(),
+                             xy=(max_generation, lbls_y),
+                             xytext=(lbls_x, lbls_y),
+                             annotation_clip=False,
+                             verticalalignment=lbls_v_align,
+                             horizontalalignment='left',
+                             rotation=getFloat("sig_treat_lbls_rotate"),
+                             size=getInt("sig_treat_lbls_font_size")
+            )
+            extra_artists.append(an)
+
+        # End of loop operations
+        odd = not odd
+        row_center += ROW_HEIGHT
+    
+
+def plot_significance(gs, data_intr):
     print("Calculating significance...")
     for i in xrange(len(getList("to_plot"))):
-        print("  Calculating significance for plot: " + str(i))
-        sig_label = getStr("sig_label")
-        sig_label = sig_label.replace('\\n', '\n')
-        lbl = sig_label + main_treatment.get_name_short()
-        #f = plt.figure(getInt("to_plot", i))
-        #r = f.canvas.get_renderer()
-        #t = plt.text(0.5, 0.5, lbl)
-        #bb = t.get_window_extent(renderer=r)
-        #print(bb.width)
-        #print(bb.height)
-        ax = plt.subplot(gs[1])
-        ax.set_xlim(0, max_generation)
-        ax.get_yaxis().set_ticks([])
-        ax.set_ylim(0.5, nr_of_treatments-0.5)
-        ax.set_ylabel(lbl,
-                      rotation='horizontal',
-                      fontsize=getInt("tick_font_size"),
-                      horizontalalignment='right',
-                      verticalalignment='center')
-
-        # Sets the position of the p<0.05 label
-        # While the y coordinate can be set directly with set_position, the x
-        # coordinate passed to this method is ignored by default. So instead,
-        # the labelpad is used to modify the x coordinate (and, as you may
-        # expect, there is no labelpad for the y coordinate, hence the two
-        # different methods for applying the offset).
-        x, y = ax.get_yaxis().label.get_position()
-        ax.get_yaxis().labelpad += getFloat("comparison_offset_x")
-        ax.get_yaxis().label.set_position((0, y - getFloat("comparison_offset_y")))
-        
-        ax.set_xlabel(getStrDefaultFirst("x_labels", i))
-        ax.tick_params(bottom=True, top=False)
-        
-        odd = True
-        ast_height = 0
-        HALF_ROW_HEIGHT=0.5
-        for compare_to in xrange(nr_of_treatments-1, -1, -1):
-            if compare_to == getInt("main_treatment"):
-                continue
-            compare_to_symbol = compare_to
-            ast_height += 1
-
-            sig_marker = getStr("sig_marker", compare_to_symbol)
-            color = getStr("colors", compare_to_symbol)
-            back_color = getStr("background_colors", compare_to_symbol)
-            treatment = data_intr.get_treatment_list()[compare_to]
-
-            try:
-                matplotlib.markers.MarkerStyle(sig_marker)
-            except ValueError:
-                print "Warning: invalid marker, marker replaced with *."
-                sig_marker = "*"
-
-            try: 
-                matplotlib.colors.colorConverter.to_rgb(color)
-            except ValueError:
-                print "Warning: invalid treatment color, replaced with grey."
-                color = "#505050"
-
-            try: 
-                matplotlib.colors.colorConverter.to_rgb(back_color)
-            except ValueError:
-                print "Warning: invalid background color, replaced with grey."
-                back_color = "#505050"
-
-            #Add the background box
-            pol_top = ast_height+HALF_ROW_HEIGHT
-            pol_bot = ast_height-HALF_ROW_HEIGHT
-            box = Polygon([(min_generation, pol_bot),
-                           (min_generation, pol_top),
-                           (max_generation, pol_top),
-                           (max_generation, pol_bot)],
-                          facecolor=back_color,
-                          zorder=-100)
-            ax.add_patch(box)
-
-            #Add the line separating the treatments
-            ax.plot([min_generation, max_generation],
-                    [pol_bot, pol_bot],
-                    color='black',
-                    linestyle='-',
-                    linewidth=1.0,
-                    solid_capstyle="projecting")
-
-            comparison = data_intr.get_comparison(compare_to,
-                                                  getInt("to_plot", i))
-            for index in comparison:
-                ax.scatter(index,
-                        ast_height,
-                        marker=sig_marker,
-                        c=color,
-                        s=50)
-
-            # Determmine position for treatment labels
-            lbls_x = max_generation*(1.0 + getFloat("sig_treat_lbls_x_offset"))
-            if getStr("sig_treat_lbls_align") == "top":
-                lbls_y = pol_top + getFloat("sig_treat_lbls_y_offset")
-                lbls_v_align = "top"
-            elif getStr("sig_treat_lbls_align") == "bottom":
-                lbls_y = pol_bot + getFloat("sig_treat_lbls_y_offset")
-                lbls_v_align = "bottom"
-            elif getStr("sig_treat_lbls_align") == "center":
-                lbls_y = ast_height + getFloat("sig_treat_lbls_y_offset")
-                lbls_v_align = "center"
-            else:
-                raise Exception("Invalid option for 'sig_treat_lbls_align': "
-                                + getStr("sig_treat_lbls_align"))
-            
-            if getBool("sig_treat_lbls_symbols"):
-                # Add symbol markers on the side
-                if  odd:
-                    lbls_x = max_generation*(1.010 +
-                                             getFloat("sig_treat_lbls_x_offset"))
-                else:
-                    lbls_x = max_generation*(1.035 +
-                                             getFloat("sig_treat_lbls_x_offset"))
-                    ax.plot([max_generation, lbls_x],
-                            [lbls_y, lbls_y],
-                            color='black',
-                            linestyle='-',
-                            linewidth=1.0,
-                            solid_capstyle="projecting",
-                            clip_on=False, 
-                            zorder=90)
-                p = ax.scatter(lbls_x, lbls_y, marker=sig_marker, c=color,
-                           s=100, clip_on=False, zorder=100)
-                extra_artists.append(p)
-            else:
-                # Add text on the side
-                an = ax.annotate(treatment.get_name_short(),
-                                 xy=(max_generation, lbls_y),
-                                 xytext=(lbls_x, lbls_y),
-                                 annotation_clip=False,
-                                 verticalalignment=lbls_v_align,
-                                 horizontalalignment='left',
-                                 rotation=getFloat("sig_treat_lbls_rotate"),
-                                 size=getInt("sig_treat_lbls_font_size")
-                )
-                extra_artists.append(an)
-
-            odd = not odd
+        for j in xrange(len(getList("comparison_main"))):
+            add_significance_bar(i, gs, data_intr, j)
     print("Calculating significance done.")
 
 
@@ -1252,7 +1289,11 @@ def setup_plots(nr_of_generations):
     # If we want to plot significance indicators we have to make an additional
     # box below the plot
     if getBool("sig"):
-        gs = gridspec.GridSpec(2, 1, height_ratios=[10, getFloat("box_height")])
+        ratios = [10]
+        nr_of_comparisons = len(getList("comparison_main"))
+        for i in xrange(nr_of_comparisons):
+            ratios.append(getFloat("comparison_height", i))
+        gs = gridspec.GridSpec(1 + nr_of_comparisons, 1, height_ratios=ratios)
         gs.update(hspace=getFloat("box_sep"))
     else:
         gs = gridspec.GridSpec(1, 1)
