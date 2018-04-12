@@ -1,5 +1,5 @@
 __author__ = 'Joost Huizinga'
-__version__ = '1.5 (Mar. 8 2018)'
+__version__ = '1.6 (Apr. 2 2018)'
 import sys
 import os.path
 import re
@@ -112,7 +112,7 @@ def getFloat(name, index=0):
 def getFloatDefFirst(name, index=0):
     result=None
     if len(global_options[name]) > 0:
-        result = global_options[name][0]
+        result = float(global_options[name][0])
     if index < len(global_options[name]):
         result = float(global_options[name][index])
     return result

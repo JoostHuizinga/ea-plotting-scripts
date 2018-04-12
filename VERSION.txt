@@ -40,8 +40,12 @@ Changes for version 1.1
 # createPlotUtils.py #
 ######################
 
-Current version: 1.5
-Last updated on: Mar 8 2018
+Current version: 1.6
+Last updated on: Apr 2 2018
+
+Changes for version 1.6
+=======================
+- The getFloatDefFirst function now properly casts the first value to a float, rather than returning it as a string.
 
 Changes for version 1.5
 =======================
