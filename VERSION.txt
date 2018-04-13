@@ -2,8 +2,28 @@
 ### createPlots.py ###
 ######################
 
-Current version: 1.3
-Last updated on: Mar. 8 2018
+Current version: 1.4
+Last updated on: Apr. 12 2018
+
+Changes for version 1.4
+=======================
+
+New options:
+- Added the sig_lbl_add_treat_name option, allowing control over whether to show the treatment name next to the significance indicator bar.
+- Added the sig_treat_lbls_show option, allowing control over whether to show the other treatment names on the other side of the significance indicator bar.
+- Added title_font_size as an alias for the title_size option, to correctly indicate that this refers to the font size of the title.
+- Added the plot_confidence_interval_border option, which makes the confidence interval regions more visible by drawing a border around them.
+- Added the confidence_interval_border_style option, which allows for changing the style of the confidence interval border.
+- Added the confidence_interval_border_width option, which allows for changing the width of the confidence interval border.
+- Added the confidence_interval_alpha option, which allows for changing the alpha of the shaded confidence interval regions.
+
+Bug fixes:
+- Fixed a bug where the bounding box of plot could be affected by elements added to a previous plot.
+- Fixed a bug where the labels next to the significance indicator bar would only be considered for the bounding box if the plot had a legend.
+- Fixed a bug where the line style could no longer be set for all treatments at once.
+- Fixed a bug where the significance marker could not be set for all treatments at once.
+- Fixed a bug where comparisons between treatments would appear in the opposite order in which they were provided.
+
 
 Changes for version 1.3
 =======================

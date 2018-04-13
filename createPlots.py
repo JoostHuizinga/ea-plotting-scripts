@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 __author__="Joost Huizinga"
-__version__="1.3 (Mar. 8 2018)"
+__version__="1.4 (Apr. 12 2018)"
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -26,7 +26,7 @@ FILL_ALPHA = 0.5
 # At some point we may want to create an object to hold all global plot settings
 # (or a local object that is passed to all relevant functions)
 # but for now this list is all we need.
-extra_artists=[]
+extra_artists={}
 
 # Derived defaults
 def def_output_dir():
@@ -149,6 +149,9 @@ addOption("comparison_offset_y", 0, nargs=1, aliases=["sig_lbl_y_offset"],
           help="Allows moving the label next the significance indicator box.")
 addOption("sig_label", "p<0.05 vs ", nargs=1, aliases=["sig_lbl"],
           help="Label next to the significance indicator box.")
+addOption("sig_lbl_add_treat_name", True, nargs=1, 
+          help="Whether to add the short name of the main treatment as part "
+          "of the label next to the significance indicator box.")
 addOption("sig_treat_lbls_x_offset", 0.005, nargs=1,
           help="Allows moving the treatment labels next to the "
           "significance indicator box horizontally.")
@@ -161,12 +164,12 @@ addOption("sig_treat_lbls_rotate", 0, nargs=1,
 addOption("sig_treat_lbls_symbols", False, nargs=1, 
           help="Plot symbols instead of names for the treatment labels next to "
           "the significance indicator box.")
-addOption("sig_treat_lbls_font_size", def_tick_font_size, nargs=1, 
-          help="Font size for the treatment labels next to "
-          "the significance indicator box.")
 addOption("sig_treat_lbls_align", "bottom", nargs=1, 
           help="Alignment for the treatment labels next to the significance "
           "indicator box. Possible values are: 'top', 'bottom', and 'center'.")
+addOption("sig_treat_lbls_show", True, nargs=1, 
+          help="Whether to show the treatment labels next to the significance "
+          "indicator box.")
 
 # Per comparison settings
 addOption("comparison_main", 0, aliases=["main_treatment"],
@@ -176,27 +179,42 @@ addOption("comparison_others", "",
 addOption("comparison_height", def_box_height, aliases=["box_height"],
           help="The height of the box showing significance indicators.")
 
-#Font settings
-addOption("sig", True, nargs=1)
-addOption("title", True, nargs=1,
-          help="Show the title of the plot.")
+# Font settings
 addOption("font_size", 18, nargs=1,
           help="The base font-size for the plot "
           "(other font-sizes are relative to this one).")
 addOption("title_size", def_title_font_size, nargs=1,
+          aliases=["title_font_size"],
           help="Font size for the titel.")
 addOption("legend_font_size", def_legend_font_size, nargs=1,
           help="Font size for the legend.")
 addOption("tick_font_size", def_tick_font_size, nargs=1,
           help="Font size for the tick-labels.")
+addOption("sig_treat_lbls_font_size", def_tick_font_size, nargs=1, 
+          help="Font size for the treatment labels next to "
+          "the significance indicator box.")
+
+# Misc settings
+addOption("sig", True, nargs=1)
+addOption("title", True, nargs=1,
+          help="Show the title of the plot.")
 addOption("legend_columns", 1, nargs=1,
           help="Number of columns for the legend.")
 addOption("legend_x_offset", 0, nargs=1,
           help="Allows for fine movement of the legend.")
 addOption("legend_y_offset", 0, nargs=1,
           help="Allows for fine movement of the legend.")
+addOption("plot_confidence_interval_border", False, nargs=1,
+          help="Whether or not the show borders at the edges of the shaded "
+          "confidence region.")
+addOption("confidence_interval_border_style", ":", nargs=1,
+          help="Line style of the confidence interval border.")
+addOption("confidence_interval_border_width", 1, nargs=1,
+          help="Line width of the confidence interval border.")
+addOption("confidence_interval_alpha", FILL_ALPHA, nargs=1,
+          help="Alpha value for the shaded region.")
 
-#Per plot settings
+# Per plot settings
 addOption("to_plot", 1, aliases=["plot_column"],
           help="The columns from the input files that should be plotted.")
 addOption("file_names", "my_plot", aliases=["plot_output"],
@@ -952,7 +970,7 @@ def warn_max_gen(data_intr, main_data, other_data, plot_id):
     return max_gen
 
 def getSigMarker(compare_to_symbol):
-    sig_marker = getStr("sig_marker", compare_to_symbol)
+    sig_marker = getStrDefaultFirst("sig_marker", compare_to_symbol)
     try:
         matplotlib.markers.MarkerStyle(sig_marker)
     except ValueError:
@@ -965,14 +983,14 @@ def getMarker(compare_to_symbol):
     try:
         matplotlib.markers.MarkerStyle(sig_marker)
     except ValueError:
-        print "Warning: invalid significance marker, marker replaced with *."
+        print "Warning: invalid plot marker, marker replaced with *."
         sig_marker = "*"
     return sig_marker
 
 def getLinestyle(compare_to_symbol):
-    linestyle = getStr("linestyle", compare_to_symbol)
+    linestyle = getStrDefaultFirst("linestyle", compare_to_symbol)
     if linestyle not in ['-', '--', '-.', ':']:
-        print "Warning: invalid significance marker, marker replaced with -."
+        print "Warning: invalid linestyle, linestyle replaced with -."
         linestyle = "-"
     return linestyle 
 
@@ -1007,6 +1025,8 @@ def get_other_treatments(compare_i, data_intr):
     if len(other_treatments) == 0:
         other_treatments = range(nr_of_treatments-1, -1, -1)
         other_treatments.remove(main_treat_i)
+    else:
+        other_treatments.reverse()
     return other_treatments
 
 
@@ -1019,6 +1039,7 @@ def create_plots(data_of_interest):
 
 
 def create_plot(plot_id, data_of_interest):
+    extra_artists[plot_id] = []
     for treatment in data_of_interest.get_treatment_list():
         plot_treatment(plot_id, treatment, data_of_interest)
 
@@ -1104,8 +1125,17 @@ def plot_treatment(plot_id, treatment, data_of_interest):
              linestyle=linestyle)
 
     #Fill confidence interval
+    alpha=getFloat("confidence_interval_alpha")
     plt.fill_between(data_step_x, var_min, var_max, edgecolor=bg_color,
-                     facecolor=bg_color, alpha=FILL_ALPHA, linewidth=NO_LINE)  
+                     facecolor=bg_color, alpha=alpha, linewidth=NO_LINE)
+
+    if getBool("plot_confidence_interval_border"):
+        style=getStr("confidence_interval_border_style")
+        width=getFloat("confidence_interval_border_width")
+        plt.plot(data_step_x, var_min, color=color, linewidth=width,
+                 linestyle=style)
+        plt.plot(data_step_x, var_max, color=color, linewidth=width,
+                 linestyle=style)
 
     #Markers used on top of the line in the plot
     plt.plot(plot_marker_x, plot_marker_y,
@@ -1137,7 +1167,10 @@ def add_significance_bar(i, gs, data_intr, bar_nr):
     print("  Calculating significance for plot: " + str(i))
     sig_label = getStr("sig_label")
     sig_label = sig_label.replace('\\n', '\n')
-    lbl = sig_label + main_treat.get_name_short()
+    if getBool("sig_lbl_add_treat_name"):
+        lbl = sig_label + main_treat.get_name_short()
+    else:
+        lbl = sig_label
     ax = plt.subplot(gs[1+bar_nr])
     ax.set_xlim(0, max_generation)
     ax.get_yaxis().set_ticks([])
@@ -1216,37 +1249,38 @@ def add_significance_bar(i, gs, data_intr, bar_nr):
             raise Exception("Invalid option for 'sig_treat_lbls_align': "
                             + getStr("sig_treat_lbls_align"))
 
-        if getBool("sig_treat_lbls_symbols"):
-            # Add symbol markers on the side
-            if  odd:
-                lbls_x = max_generation*(1.010 +
-                                         getFloat("sig_treat_lbls_x_offset"))
+        if getBool("sig_treat_lbls_show"):
+            if getBool("sig_treat_lbls_symbols"):
+                # Add symbol markers on the side
+                if  odd:
+                    lbls_x = max_generation*(1.010 +
+                                             getFloat("sig_treat_lbls_x_offset"))
+                else:
+                    lbls_x = max_generation*(1.035 +
+                                             getFloat("sig_treat_lbls_x_offset"))
+                    ax.plot([max_generation, lbls_x],
+                            [lbls_y, lbls_y],
+                            color='black',
+                            linestyle='-',
+                            linewidth=1.0,
+                            solid_capstyle="projecting",
+                            clip_on=False, 
+                            zorder=90)
+                p = ax.scatter(lbls_x, lbls_y, marker=sig_marker, c=color,
+                           s=100, clip_on=False, zorder=100)
+                extra_artists[plot_id].append(p)
             else:
-                lbls_x = max_generation*(1.035 +
-                                         getFloat("sig_treat_lbls_x_offset"))
-                ax.plot([max_generation, lbls_x],
-                        [lbls_y, lbls_y],
-                        color='black',
-                        linestyle='-',
-                        linewidth=1.0,
-                        solid_capstyle="projecting",
-                        clip_on=False, 
-                        zorder=90)
-            p = ax.scatter(lbls_x, lbls_y, marker=sig_marker, c=color,
-                       s=100, clip_on=False, zorder=100)
-            extra_artists.append(p)
-        else:
-            # Add text on the side
-            an = ax.annotate(other_treat.get_name_short(),
-                             xy=(max_generation, lbls_y),
-                             xytext=(lbls_x, lbls_y),
-                             annotation_clip=False,
-                             verticalalignment=lbls_v_align,
-                             horizontalalignment='left',
-                             rotation=getFloat("sig_treat_lbls_rotate"),
-                             size=getInt("sig_treat_lbls_font_size")
-            )
-            extra_artists.append(an)
+                # Add text on the side
+                an = ax.annotate(other_treat.get_name_short(),
+                                 xy=(max_generation, lbls_y),
+                                 xytext=(lbls_x, lbls_y),
+                                 annotation_clip=False,
+                                 verticalalignment=lbls_v_align,
+                                 horizontalalignment='left',
+                                 rotation=getFloat("sig_treat_lbls_rotate"),
+                                 size=getInt("sig_treat_lbls_font_size")
+                )
+                extra_artists[plot_id].append(an)
 
         # End of loop operations
         odd = not odd
@@ -1336,10 +1370,11 @@ def write_plots():
 
     for i in xrange(len(getList("to_plot"))):
         print("Writing plot " + str(i) + " ...")
-        fig = plt.figure(getInt("to_plot", i))
+        plot_id = getInt("to_plot", i)
+        fig = plt.figure(plot_id)
         ax = fig.get_axes()[0]
-        if getFloat("box_sep") == 0:
-            plt.tight_layout()
+        #if getFloat("box_sep") == 0:
+        #    plt.tight_layout()
         if getStr("legend_loc", i) != "none":
             loc = getStr("legend_loc", i)
             columns = getInt("legend_columns")
@@ -1349,16 +1384,10 @@ def write_plots():
                         "anchor x:", anchor_x, "anchor y:", anchor_y)
             lgd = ax.legend(loc=loc, ncol=columns,
                             bbox_to_anchor=(anchor_x, anchor_y, 1, 1))
-            extra_artists.append(lgd)
-            if len(extra_artists) > 0:
-                plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,
-                            bbox_extra_artists=(extra_artists), bbox_inches='tight')
-            else:
-                print "Warning: insufficient data to create legend."
-                plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,
-                            bbox_inches='tight')
-        else:
-            plt.savefig(output_dir + "/" + getStr("file_names", i) + ext)
+            extra_artists[plot_id].append(lgd)
+        plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,
+                    bbox_extra_artists=extra_artists[plot_id],
+                    bbox_inches='tight')
         print("Writing plot " + str(i) + " done.")
 
 
