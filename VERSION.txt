@@ -60,8 +60,13 @@ Changes for version 1.1
 # createPlotUtils.py #
 ######################
 
-Current version: 1.6
-Last updated on: Apr 2 2018
+Current version: 1.7
+Last updated on: Jun. 27 2018
+
+Changes for version 1.7
+=======================
+- Added the CacheError as an additional exception that can be thrown.
+- Added a helper function for retrieving a renderer from Matplotlib, which can resolve some issues with respect to the "tight layout" option.
 
 Changes for version 1.6
 =======================

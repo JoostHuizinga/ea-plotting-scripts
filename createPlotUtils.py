@@ -1,5 +1,5 @@
 __author__ = 'Joost Huizinga'
-__version__ = '1.6 (Apr. 2 2018)'
+__version__ = '1.7 (Jun. 27 2018)'
 import sys
 import os.path
 import re
@@ -10,6 +10,7 @@ import scipy.stats as st
 import subprocess as sp
 import argparse as ap
 import warnings
+import io
 
 ###################
 #### EXCEPTIONS ###
@@ -19,6 +20,16 @@ class Error(Exception):
     pass
 
 class InputError(Error):
+    """Exception raised for errors in the input.
+
+    Attributes:
+        msg  -- explanation of the error
+    """
+
+    def __init__(self, msg):
+        self.msg = msg
+
+class CacheError(Error):
     """Exception raised for errors in the input.
 
     Attributes:
@@ -596,3 +607,12 @@ def parse_treatment_ids(other_treatments, data_intr):
         if treatment_i is not None:
             resolved_treatments.append(treatment_i)
     return resolved_treatments
+
+
+def get_renderer(fig):
+    if hasattr(fig.canvas, "get_renderer"):
+        renderer = fig.canvas.get_renderer()
+    else:
+        fig.canvas.print_pdf(io.BytesIO())
+        renderer = fig._cachedRenderer
+    return renderer
