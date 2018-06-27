@@ -2,8 +2,16 @@
 ### createPlots.py ###
 ######################
 
-Current version: 1.4
-Last updated on: Apr. 12 2018
+Current version: 1.5
+Last updated on: Jun. 27 2018
+
+Changes for version 1.5
+=======================
+- Split the box_sep parameter into a box_margin_before and a box_margin_between parameter, allowing you to define the the space between the main plot and the significance indicator boxes and between the significance indicator boxes separately.
+- Add the "bb" option, which allows you to determine how the bounding-box is calculated, which should make it easier to create two plots with the exact same dimensions. The options are default, tight, and custom. Here, default is the default bounding box, which leaves a lot of white-space and may not capture all labels, but it is guaranteed to have the correct aspect ratio. Tight will prune the bounding box to remove whitespace and include labels originally outside of the bounding box, but it will not preserve the original aspect ratio. Custom manually calculates the bounding box to remove most white space (but not as much as the tight layout) while preserving aspect ratio.
+- Renamed the sig_label to sig_header and allow it to be shown as a header with sig_header_show (instead of being prepended to each of the significance box labels). If it is shown as a header, it can be offset with sig_header_x_offset and sig_header_y_offset, and its font size can be modified with sig_header_font_size.
+- Updated the cache file reading to verify the step size in the cache, and throw an error if the step size of the cache does not match the step size of the configuration file. This does not work when the generation is read from file.
+
 
 Changes for version 1.4
 =======================

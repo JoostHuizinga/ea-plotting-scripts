@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 __author__="Joost Huizinga"
-__version__="1.4 (Apr. 12 2018)"
+__version__="1.5 (Jun. 27 2018)"
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -8,6 +8,7 @@ from matplotlib.patches import Polygon
 
 import os
 import sys
+import io
 
 import argparse as ap
 from createPlotUtils import *
@@ -118,8 +119,11 @@ addOption("bootstrap", False, nargs=1,
 addOption("smoothing", 1, nargs=1,
           help="Applies a median window of the provided size to smooth the "
           "line plot.")
-addOption("box_sep", 0, nargs=1,
-          help="Space between significance box and the main plot.")
+addOption("box_margin_before", 0, nargs=1, aliases=["box_sep"],
+          help="Space before the significance indicator boxes, "
+          "separating them from the main plot..")
+addOption("box_margin_between", 0, nargs=1,
+          help="Space between the significance indicator boxes.")
 addOption("fig_size", [8, 6], nargs=2,
           help="The size of the resulting figure.")
 addOption("separator", " ", nargs=1,
@@ -141,13 +145,24 @@ addOption("one_value_per_dir", False, nargs=1,
           "to be plotted sequentially.")
 addOption("type", "pdf", nargs=1,
           help="The file type in which the plot will be written.")
+addOption("bb", "tight", nargs=1,
+          help="How the bounding box of the image is determined. Options are "
+          "default (keep aspect ratio and white space), "
+          "tight (sacrifice aspect ratio to prune white space), "
+          "and custom (keep aspect ratio but prune some white space).")
 
 # General significance bar settings
 addOption("comparison_offset_x", 0, nargs=1, aliases=["sig_lbl_x_offset"],
           help="Allows moving the label next the significance indicator box.")
 addOption("comparison_offset_y", 0, nargs=1, aliases=["sig_lbl_y_offset"],
           help="Allows moving the label next the significance indicator box.")
-addOption("sig_label", "p<0.05 vs ", nargs=1, aliases=["sig_lbl"],
+addOption("sig_header_show", False, nargs=1,
+          help="Whether there should be a header for the significance indicator box.")
+addOption("sig_header_x_offset", 0, nargs=1,
+          help="Allows moving the header next the significance indicator box.")
+addOption("sig_header_y_offset", 0, nargs=1,
+          help="Allows moving the header next the significance indicator box.")
+addOption("sig_label", "p<0.05 vs ", nargs=1, aliases=["sig_lbl", "sig_header"],
           help="Label next to the significance indicator box.")
 addOption("sig_lbl_add_treat_name", True, nargs=1, 
           help="Whether to add the short name of the main treatment as part "
@@ -193,6 +208,10 @@ addOption("tick_font_size", def_tick_font_size, nargs=1,
 addOption("sig_treat_lbls_font_size", def_tick_font_size, nargs=1, 
           help="Font size for the treatment labels next to "
           "the significance indicator box.")
+addOption("sig_header_font_size", def_tick_font_size, nargs=1, 
+          help="Font size for the header next to the "
+          "the significance indicator box.")
+
 
 # Misc settings
 addOption("sig", True, nargs=1)
@@ -603,6 +622,7 @@ class DataSingleTreatment:
     def init_median_and_ci_from_cache(self, plot_id):
         # Read global data
         step = getInt("step")
+        x_from_file = getBool("x_from_file")
 
         # Get the max generation for which we have data
         max_generation = self.get_max_generation()
@@ -613,38 +633,24 @@ class DataSingleTreatment:
         # Count the number of data points we have in
         count = get_nr_of_lines(cache_file_name)
 
-        # If the number of points in the cache file is smaller than, or equal
-        # to, the number of points requested, we probably want to plot every
-        # single data-point we have.
-        if count-1 <= data_points:
-            cache_step = 1
-        else:
-            cache_step = step
-
         #Read the cache file
         with open(cache_file_name, 'r') as cache_file:
             print("Reading from cache file " + cache_file_name + "...")
             self.median_and_ci[plot_id] = MedianAndCI()
-            line_number = 0
             data_point_number = 0
             for line in cache_file:
                 try:
-                    if line_number % cache_step == 0:
-                        generation = generations_to_plot[data_point_number]
-                        split_line = line.split()
-                        debug_print("data", split_line)
-                        if len(split_line) == 3:
-                            self.median_and_ci[plot_id].add(generation,
-                                                            split_line[0],
-                                                            split_line[1],
-                                                            split_line[2])
-                        elif len(split_line) == 4:
-                            self.median_and_ci[plot_id].add(int(split_line[3]),
-                                                            split_line[0],
-                                                            split_line[1],
-                                                            split_line[2])
-                        data_point_number += 1
-                    line_number += 1
+                    generation = generations_to_plot[data_point_number]
+                    split_line = line.split()
+                    debug_print("data", "Expected generation:", generation)
+                    debug_print("data", split_line)
+                    if generation != int(split_line[3]) and not x_from_file:
+                        raise CacheError("Step mismatch")
+                    self.median_and_ci[plot_id].add(int(split_line[3]),
+                                                        split_line[0],
+                                                        split_line[1],
+                                                        split_line[2])
+                    data_point_number += 1
                 except IndexError:
                     break
 
@@ -1163,18 +1169,38 @@ def add_significance_bar(i, gs, data_intr, bar_nr):
     main_treat = data_intr.get_treatment_list()[main_treat_i]
     other_treats = get_other_treatments(bar_nr, data_intr)
     plot_id = getInt("to_plot", i)
+    box_top = len(other_treats)*ROW_HEIGHT
+    box_bot = 0
     
     print("  Calculating significance for plot: " + str(i))
     sig_label = getStr("sig_label")
     sig_label = sig_label.replace('\\n', '\n')
-    if getBool("sig_lbl_add_treat_name"):
+
+    if getBool("sig_lbl_add_treat_name") and not getBool("sig_header_show"):
         lbl = sig_label + main_treat.get_name_short()
-    else:
+    elif not getBool("sig_header_show"):
         lbl = sig_label
-    ax = plt.subplot(gs[1+bar_nr])
+    elif getBool("sig_lbl_add_treat_name"):
+        lbl = main_treat.get_name_short()
+    else:
+        lbl = ""
+    ax = plt.subplot(gs[bar_nr])
     ax.set_xlim(0, max_generation)
     ax.get_yaxis().set_ticks([])
-    ax.set_ylim(0, len(other_treats)*ROW_HEIGHT)
+    ax.set_ylim(box_bot, box_top)
+    if getBool("sig_header_show") and bar_nr == 0:
+        # Add text on the side
+        dx = -(getFloat("sig_header_x_offset")*float(max_generation))
+        dy = box_top - (getFloat("sig_header_y_offset")*float(box_top))
+        an = ax.annotate(sig_label,
+                         xy=(dx, dy),
+                         xytext=(dx, dy),
+                         annotation_clip=False,
+                         verticalalignment='top',
+                         horizontalalignment='right',
+                         size=getInt("sig_header_font_size")
+        )
+        extra_artists[plot_id].append(an)
     ax.set_ylabel(lbl,
                   rotation='horizontal',
                   fontsize=getInt("tick_font_size"),
@@ -1327,10 +1353,20 @@ def setup_plots(nr_of_generations):
         nr_of_comparisons = len(getList("comparison_main"))
         for i in xrange(nr_of_comparisons):
             ratios.append(getFloat("comparison_height", i))
-        gs = gridspec.GridSpec(1 + nr_of_comparisons, 1, height_ratios=ratios)
-        gs.update(hspace=getFloat("box_sep"))
+        high_level_ratios = [ratios[0], sum(ratios[1:])]
+        
+        #gs = gridspec.GridSpec(1 + nr_of_comparisons, 1, height_ratios=ratios)
+        gs = gridspec.GridSpec(2, 1,
+                               height_ratios=high_level_ratios,
+                               hspace=getFloat("box_margin_before"))
+        gs1 = gridspec.GridSpecFromSubplotSpec(nr_of_comparisons, 1,
+                                               subplot_spec=gs[1],
+                                               height_ratios=ratios[1:],
+                                               hspace=getFloat("box_margin_between"))
+        #gs.update(hspace=getFloat("box_margin_before"))
+        #gs1.update(hspace=getFloat("box_margin_between"))
     else:
-        gs = gridspec.GridSpec(1, 1)
+        gs1 = gridspec.GridSpec(1, 1)
 
     # Set all labels and limits for the main window (gs[0])
     for i in xrange(len(getList("to_plot"))):
@@ -1357,7 +1393,7 @@ def setup_plots(nr_of_generations):
             ax.set_xticks(getIntList("x_ticks"))
         ax.tick_params(axis='x', bottom='off')
 
-    return gs
+    return gs1
 
 
 def write_plots():
@@ -1385,9 +1421,44 @@ def write_plots():
             lgd = ax.legend(loc=loc, ncol=columns,
                             bbox_to_anchor=(anchor_x, anchor_y, 1, 1))
             extra_artists[plot_id].append(lgd)
-        plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,
-                    bbox_extra_artists=extra_artists[plot_id],
-                    bbox_inches='tight')
+            
+        # Determine custom bounding box
+        if getStr("bb") == "custom":
+            fig_size = getFloatPair("fig_size")
+            renderer = get_renderer(fig)
+            bb = fig.get_window_extent(renderer)
+            bb = fig.get_tightbbox(renderer)
+            target_bb = matplotlib.transforms.Bbox.from_bounds(0,0, fig_size[0], fig_size[1])
+            trans2 = matplotlib.transforms.BboxTransformTo(target_bb)
+            trans = fig.transFigure.inverted()
+            print "Figure size:", fig_size
+            print "Original bb box:", bb.get_points()
+            for artist in extra_artists[plot_id]:
+                other_bb = artist.get_window_extent(renderer)
+                other_bb = other_bb.transformed(trans)
+                other_bb = other_bb.transformed(trans2)
+                print other_bb.get_points()
+                bb = matplotlib.transforms.BboxBase.union([bb, other_bb])
+            target_aspect = fig_size[0] / fig_size[1]
+            bb_aspect = bb.width / bb.height
+            print target_aspect, bb_aspect
+            if target_aspect < bb_aspect:
+                bb = bb.expanded(1, bb_aspect / target_aspect)
+            else:
+                bb = bb.expanded(target_aspect / bb_aspect, 1)
+            bb = bb.padded(0.2)
+            print "Extended bb box:", bb.get_points()
+            plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,
+                    bbox_extra_artists=extra_artists[plot_id], bbox_inches=bb)
+        elif getStr("bb") == "default":
+            plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,
+                    bbox_extra_artists=extra_artists[plot_id])
+        elif getStr("bb") == "tight":
+            plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,
+                        bbox_extra_artists=extra_artists[plot_id],
+                        bbox_inches='tight')
+        else:
+            raise Exception("Invalid bounding box option.")
         print("Writing plot " + str(i) + " done.")
 
 
