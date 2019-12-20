@@ -2,11 +2,40 @@
 ### createPlots.py ###
 ######################
 
-Current version: 1.5
-Last updated on: Jun. 27 2018
+Current version: 1.7
+Last updated on: Dec. 19 2018
+
+Changes for version 1.7
+=======================
+
+Added "manual" as a legal argument for the "bb" (bounding box) option. When specified, the bounding box of the figure will be set based on the values provided with the following options:
+- bb_width: The width of the bounding box, in inches.
+- bb_height: The height of the bounding box, in inches.
+- bb_x_offset: The x offset of the bounding box, in inches.
+- bb_y_offset: The y offset of the bounding box, in inches.
+- bb_x_center_includes_labels: If True, take the figure labels into account when horizontally centering the bounding box. If false, ignore the labels when horizontally centering.
+- bb_y_center_includes_labels: If True, take the figure labels into account when vertically centering the bounding box. If false, ignore the labels when vertically centering.
+
+Changes for version 1.6
+=======================
+
+Added options for creating an inset for a figure. The options are:
+- inset_stats: Which statistic to plot in the inset. See the stats option for legal arguments.
+- inset_x: The x-coordinate of the left side of the inset in figure coordinates.
+- inset_y: The y-coordinate of the bottom side of the inset in figure coordinates.
+- inset_w: The width of the inset.
+- inset_h: The height of the inset.
+- inset_area_x1: The smallest x-value for the data covered in the inset (in data coordinates).
+- inset_area_x2: The largest x-value for the data covered in the inset (in data coordinates).
+- inset_area_y1: The smallest y-value for the data covered in the inset (in data coordinates).
+- inset_area_y2: The largest y-value for the data covered in the inset (in data coordinates).
+- inset_labels: Which tick-labels to show. Current options are 'all' and 'none'.
+- inset_labels: Which ticks to show. Current options are 'all' and 'none'.
+- inset_lines_visible: Which lines to show for indicating the inset area. Current options are 'all' and 'none'.
 
 Changes for version 1.5
 =======================
+
 - Split the box_sep parameter into a box_margin_before and a box_margin_between parameter, allowing you to define the the space between the main plot and the significance indicator boxes and between the significance indicator boxes separately.
 - Add the "bb" option, which allows you to determine how the bounding-box is calculated, which should make it easier to create two plots with the exact same dimensions. The options are default, tight, and custom. Here, default is the default bounding box, which leaves a lot of white-space and may not capture all labels, but it is guaranteed to have the correct aspect ratio. Tight will prune the bounding box to remove whitespace and include labels originally outside of the bounding box, but it will not preserve the original aspect ratio. Custom manually calculates the bounding box to remove most white space (but not as much as the tight layout) while preserving aspect ratio.
 - Renamed the sig_label to sig_header and allow it to be shown as a header with sig_header_show (instead of being prepended to each of the significance box labels). If it is shown as a header, it can be offset with sig_header_x_offset and sig_header_y_offset, and its font size can be modified with sig_header_font_size.

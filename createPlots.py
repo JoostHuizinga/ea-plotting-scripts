@@ -1,6 +1,4 @@
-#!/usr/bin/env python
-__author__="Joost Huizinga"
-__version__="1.5 (Jun. 27 2018)"
+#!/usr/bin/env python3
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -9,9 +7,13 @@ from matplotlib.patches import Polygon
 import os
 import sys
 import io
+import copy
 
 import argparse as ap
 from createPlotUtils import *
+
+__author__ = "Joost Huizinga"
+__version__ = "1.7 (Dec. 19 2019)"
 
 initOptions("Script for creating line-plots.",
             "[input_directories [input_directories ...]] [OPTIONS]",
@@ -26,8 +28,8 @@ FILL_ALPHA = 0.5
 # Global variables
 # At some point we may want to create an object to hold all global plot settings
 # (or a local object that is passed to all relevant functions)
-# but for now this list is all we need.
-extra_artists={}
+# but for now this dictionary is all we need.
+extra_artists = {}
 
 # Derived defaults
 def def_output_dir():
@@ -61,7 +63,7 @@ def def_marker_offset():
     step = marker_step/num_treatments
     if step < 1:
         step = 1
-    return range(0, marker_step, step)
+    return list(range(0, marker_step, int(step)))
 def def_legend_font_size(): return getInt("font_size")-4
 def def_title_font_size(): return getInt("font_size")+4
 def def_tick_font_size(): return getInt("font_size")-6
@@ -116,6 +118,18 @@ addOption("bootstrap", False, nargs=1,
           help="If true, the shaded area will be based on bootstrapped "
           "confidence intervals. Otherwise the shaded area represents the "
           "inter-quartile range.")
+addOption("stats", "median_and_interquartile_range", nargs=1,
+          help="The type of statistics to plot in format [central]_and_[ci]."
+          "Central options: mean, median. CI options: interquartile_range, "
+          "std_error, bootstrap_percentile, bootstrap_pivotal, bootstrap_bca, "
+          "bootstrap_pi, bootstrap_abc. Percentile and takes the "
+          "percentile of the sampled data (biased). Pivotal also subtracts "
+          "difference between the sampled and the original distribution "
+          "(unbiased, but may be wrong for certain distributions). Pi is "
+          "the scikits implementation of the percentile method. Bca is a "
+          "faster, bias-correct bootstrap method. Abc is a parametric method "
+          "meaning its faster, but it requires a smooth function to be "
+          "available.")
 addOption("smoothing", 1, nargs=1,
           help="Applies a median window of the provided size to smooth the "
           "line plot.")
@@ -149,7 +163,59 @@ addOption("bb", "tight", nargs=1,
           help="How the bounding box of the image is determined. Options are "
           "default (keep aspect ratio and white space), "
           "tight (sacrifice aspect ratio to prune white space), "
+          "manual (specify the bounding box yourself),"
           "and custom (keep aspect ratio but prune some white space).")
+addOption("bb_width", nargs=1,
+          help="The width of the bounding box, in inches.")
+addOption("bb_height", nargs=1,
+          help="The height of the bounding box, in inches.")
+addOption("bb_x_offset", 0, nargs=1,
+          help="The x offset of the bounding box, in inches.")
+addOption("bb_y_offset", 0, nargs=1,
+          help="The y offset of the bounding box, in inches.")
+addOption("bb_x_center_includes_labels", True, nargs=1,
+          help="If True, take the figure labels into account when horizontally "
+          "centering the bounding box. If false, ignore the labels when "
+          "horizontally centering.")
+addOption("bb_y_center_includes_labels", True, nargs=1,
+          help="If True, take the figure labels into account when vertically "
+          "centering the bounding box. If false, ignore the labels when "
+          "vertically centering.")
+
+# General inset settings
+addOption('inset_stats', '', nargs=1,
+          help="Which statistic to plot in the inset. "
+          "See the stats option for legal arguments.")
+addOption('inset_x', 0.5, nargs=1,
+          help="The x-coordinate of the left side of the inset in figure "
+          "coordinates.")
+addOption('inset_y', 0.5, nargs=1,
+          help="The y-coordinate of the bottom side of the inset in figure "
+          "coordinates.")
+addOption('inset_w', 0.47, nargs=1,
+          help="The width of the inset.")
+addOption('inset_h', 0.47, nargs=1,
+          help="The height of the inset.")
+addOption('inset_area_x1', 0, nargs=1,
+          help="The smallest x-value for the data covered in the inset "
+          "(in data coordinates).")
+addOption('inset_area_x2', 1, nargs=1,
+          help="The largest x-value for the data covered in the inset "
+          "(in data coordinates).")
+addOption('inset_area_y1', 0, nargs=1,
+          help="The smallest y-value for the data covered in the inset "
+          "(in data coordinates).")
+addOption('inset_area_y2', 1, nargs=1,
+          help="The largest y-value for the data covered in the inset "
+          "(in data coordinates).")
+addOption('inset_labels', 'none', nargs=1,
+          help="Which tick-labels to show. Current options are 'all' and "
+          "'none'.")
+addOption('inset_ticks', 'none', nargs=1,
+          help="Which ticks to show. Current options are 'all' and 'none'.")
+addOption('inset_lines_visible', 'all', nargs=1,
+          help="Which lines to show for indicating the inset area. "
+          "Current options are 'all' and 'none'.")
 
 # General significance bar settings
 addOption("comparison_offset_x", 0, nargs=1, aliases=["sig_lbl_x_offset"],
@@ -185,6 +251,8 @@ addOption("sig_treat_lbls_align", "bottom", nargs=1,
 addOption("sig_treat_lbls_show", True, nargs=1, 
           help="Whether to show the treatment labels next to the significance "
           "indicator box.")
+addOption("p_threshold", 0.05, nargs=1,
+          help="P threshold for the significance indicators.")
 
 # Per comparison settings
 addOption("comparison_main", 0, aliases=["main_treatment"],
@@ -214,7 +282,8 @@ addOption("sig_header_font_size", def_tick_font_size, nargs=1,
 
 
 # Misc settings
-addOption("sig", True, nargs=1)
+addOption("sig", True, nargs=1,
+          help="Show the significance bar underneath the plot.")
 addOption("title", True, nargs=1,
           help="Show the title of the plot.")
 addOption("legend_columns", 1, nargs=1,
@@ -365,8 +434,10 @@ class Treatment:
     def get_name_short(self):
         return self.short_name
 
-    def get_cache_file_name(self, plot_id):
-        return self.cache_file_name_prefix + str(plot_id) + ".cache"
+    def get_cache_file_name(self, plot_id, stats=''):
+        if stats == '':
+            return self.cache_file_name_prefix + str(plot_id) + ".cache"
+        return self.cache_file_name_prefix + stats + '_' + str(plot_id) + ".cache"
 
 
 class TreatmentList:
@@ -439,8 +510,8 @@ class MedianAndCI:
         ci_max_array = self.get_ci_max_array()
 
         with open(cache_file_name, 'w') as cache_file:
-            print ("Writing " + cache_file_name + "...")
-            for i in xrange(len(median_array)):
+            print("Writing " + cache_file_name + "...")
+            for i in range(len(median_array)):
                 cache_file.write(str(median_array[i]) + " ")
                 cache_file.write(str(ci_min_array[i]) + " ")
                 cache_file.write(str(ci_max_array[i]) + " ")
@@ -491,7 +562,7 @@ class RawData:
         #Read global data
         self.max_generation = getInt("max_generation")
         if self.max_generation == MAX_GEN_NOT_PROVIDED:
-            for data in self.raw_data.itervalues():
+            for data in self.raw_data.values():
                 generations = max(data.keys())
                 debug_print("plot", "generations: " + str(generations))
                 if generations > self.max_generation:
@@ -503,6 +574,7 @@ class DataSingleTreatment:
         self.treatment = treatment
         self.raw_data = None
         self.median_and_ci = dict()
+        self.stats = dict()
         self.max_generation = None
 
     def get_raw_data(self):
@@ -510,7 +582,15 @@ class DataSingleTreatment:
             self.init_raw_data()
         return self.raw_data
 
+    def get_stats(self, plot_id, stats):
+        if plot_id not in self.stats:
+            self.init_stats(plot_id, stats)
+        if stats not in self.stats[plot_id]:
+            self.init_stats(plot_id, stats)
+        return self.stats[plot_id][stats]
+
     def get_median_and_ci(self, plot_id):
+        print('WARNING: Method get_median_and_ci is deprecated')
         if plot_id not in self.median_and_ci:
             self.init_median_and_ci(plot_id)
         return self.median_and_ci[plot_id]
@@ -520,7 +600,17 @@ class DataSingleTreatment:
             self.init_max_generation()
         return self.max_generation
 
+    def stats_to_cache(self, stats):
+        #Read global data
+        to_plot = getIntList("to_plot")
+
+        for plot_id in to_plot:
+            median_and_ci = self.get_stats(plot_id, stats)
+            filename = self.treatment.get_cache_file_name(plot_id, stats)
+            median_and_ci.to_cache(filename)
+    
     def to_cache(self):
+        print('WARNING: to_cache is deprecated')
         #Read global data
         to_plot = getIntList("to_plot")
 
@@ -566,7 +656,7 @@ class DataSingleTreatment:
         elif pool:
             for dir_name, file_names in zip(self.treatment.dirs,
                                             self.treatment.files_per_pool):
-                print "Pooling for directory: ", dir_name
+                print("Pooling for directory: ", dir_name)
                 results = []
                 for file_name in file_names:
                     with open(file_name, 'r') as separated_file:
@@ -580,7 +670,7 @@ class DataSingleTreatment:
                             if len(results) < (generation+1):
                                 results.append(result)
                             else:
-                                for i in xrange(len(result)):
+                                for i in range(len(result)):
                                     old_value = results[generation][i]
                                     new_value = result[i]
                                     if new_value > old_value:
@@ -605,7 +695,26 @@ class DataSingleTreatment:
                         self._add(split_line, generation)
                         generation += 1
 
+    def init_stats(self, plot_id, stats):
+        #Get global data
+        read_cache = getBool("read_cache") and getBool("read_median_ci_cache")
+
+        if read_cache:
+            try:
+                self.init_stats_from_cache(plot_id, stats)
+                assert plot_id in self.stats
+                assert stats in self.stats[plot_id]
+                return
+            except IOError:
+                pass
+            except CacheException:
+                pass
+        self.init_stats_from_data(plot_id, stats)
+        assert plot_id in self.stats
+        assert stats in self.stats[plot_id]
+
     def init_median_and_ci(self, plot_id):
+        print('WARNING: init_median_and_ci is deprecated')
         #Get global data
         read_cache = getBool("read_cache") and getBool("read_median_ci_cache")
 
@@ -619,7 +728,45 @@ class DataSingleTreatment:
                 pass
         self.init_median_and_ci_from_data(plot_id)
 
+    def init_stats_from_cache(self, plot_id, stats):
+        # Read global data
+        step = getInt("step")
+        x_from_file = getBool("x_from_file")
+
+        # Get the max generation for which we have data
+        max_generation = self.get_max_generation()
+        generations_to_plot = range(0, max_generation, step)
+        data_points = len(generations_to_plot)
+        cache_file_name = self.treatment.get_cache_file_name(plot_id, stats)
+
+        # Count the number of data points we have in
+        count = get_nr_of_lines(cache_file_name)
+
+        #Read the cache file
+        with open(cache_file_name, 'r') as cache_file:
+            print("Reading from cache file " + cache_file_name + "...")
+            if plot_id not in self.stats:
+                self.stats[plot_id] = dict()
+            self.stats[plot_id][stats] = MedianAndCI()
+            data_point_number = 0
+            for line in cache_file:
+                try:
+                    generation = generations_to_plot[data_point_number]
+                    split_line = line.split()
+                    debug_print("data", "Expected generation:", generation)
+                    debug_print("data", split_line)
+                    if generation != int(split_line[3]) and not x_from_file:
+                        raise CacheError("Step mismatch")
+                    self.stats[plot_id][stats].add(int(split_line[3]),
+                                                        split_line[0],
+                                                        split_line[1],
+                                                        split_line[2])
+                    data_point_number += 1
+                except IndexError:
+                    break
+
     def init_median_and_ci_from_cache(self, plot_id):
+        print('WARNING: init_median_and_ci_from_cache is deprecated')
         # Read global data
         step = getInt("step")
         x_from_file = getBool("x_from_file")
@@ -654,20 +801,24 @@ class DataSingleTreatment:
                 except IndexError:
                     break
 
-    def init_median_and_ci_from_data(self, plot_id):
+    def init_stats_from_data(self, plot_id, stats):
         #Read global data
         step = getInt("step")
-        bootstrap = getBool("bootstrap")
+        #stats = getStr('stats')
+            
         write_cache = (getBool("write_cache") and
                        getBool("write_median_ci_cache"))
         x_from_file = getBool("x_from_file")
 
         #Initialize empty median and ci
-        self.median_and_ci[plot_id] = MedianAndCI()
+        if plot_id not in self.stats:
+            self.stats[plot_id] = dict()
+        self.stats[plot_id][stats] = MedianAndCI()
+        #self.median_and_ci[plot_id] = MedianAndCI()
         max_generation = self.get_max_generation()
 
         if plot_id not in self.get_raw_data():
-            print "Warning: no data available for plot", plot_id, "skipping."
+            print("Warning: no data available for plot", plot_id, "skipping.")
             return
         if x_from_file:
             max_generation_available = self.get_raw_data().get_max_generation(plot_id)
@@ -685,16 +836,73 @@ class DataSingleTreatment:
         y_values = sorted(self.get_raw_data()[plot_id].keys())
         generations_to_plot = y_values[0:len(y_values):step]
         debug_print("plot", "generations_to_plot: " + str(generations_to_plot) +
-                    " max generation: " +str(max_generation))
+                    " max generation: " + str(max_generation))
         for generation in generations_to_plot:
             raw_data = self.get_raw_data()[plot_id][generation]
-            if bootstrap:
-                print("Generation: " + str(generation))
-                median, ci_min, ci_max = calc_median_and_bootstrap(raw_data)
-                debug_print("ci", str(median) + " " +
-                            str(ci_min) + " " + str(ci_max))
-            else:
-                median, ci_min, ci_max = calc_median_and_interquartile_range(raw_data)
+            # if bootstrap:
+            print("Generation: " + str(generation))
+            # print("raw_data:", raw_data)
+            median, ci_min, ci_max = calc_stats(raw_data, stats)
+            # print("median:", median, ci_min, ci_max)
+            debug_print("ci", str(median) + " " +
+                        str(ci_min) + " " + str(ci_max))
+            # else:
+            #     median, ci_min, ci_max = calc_median_and_interquartile_range(raw_data)
+            self.stats[plot_id][stats].add(generation, median, ci_min, ci_max)
+        if write_cache:
+            self.stats_to_cache(stats)
+                
+    def init_median_and_ci_from_data(self, plot_id):
+        print('WARNING: init_median_and_ci_from_data is deprecated')
+        
+        #Read global data
+        step = getInt("step")
+        stats = getStr('stats')
+
+        # Backwards compatibility with outdated bootstrap option
+        bootstrap = getBool("bootstrap")
+        if bootstrap:
+            stats = 'median_and_bootstrap_percentile'
+            
+        write_cache = (getBool("write_cache") and
+                       getBool("write_median_ci_cache"))
+        x_from_file = getBool("x_from_file")
+
+        #Initialize empty median and ci
+        self.median_and_ci[plot_id] = MedianAndCI()
+        max_generation = self.get_max_generation()
+
+        if plot_id not in self.get_raw_data():
+            print("Warning: no data available for plot", plot_id, "skipping.")
+            return
+        if x_from_file:
+            max_generation_available = self.get_raw_data().get_max_generation(plot_id)
+        else:
+            max_generation_available = len(self.get_raw_data()[plot_id])
+        if max_generation_available < max_generation:
+            print("Warning: data does not extent until max generation: " +
+                  str(max_generation))
+            print("Maximum generation available is: " +
+                  str(max_generation_available))
+            max_generation = max_generation_available
+
+        #Calculate median and confidence intervals
+        print("Calculating confidence intervals...")
+        y_values = sorted(self.get_raw_data()[plot_id].keys())
+        generations_to_plot = y_values[0:len(y_values):step]
+        debug_print("plot", "generations_to_plot: " + str(generations_to_plot) +
+                    " max generation: " + str(max_generation))
+        for generation in generations_to_plot:
+            raw_data = self.get_raw_data()[plot_id][generation]
+            # if bootstrap:
+            print("Generation: " + str(generation))
+            # print("raw_data:", raw_data)
+            median, ci_min, ci_max = calc_stats(raw_data, stats)
+            # print("median:", median, ci_min, ci_max)
+            debug_print("ci", str(median) + " " +
+                        str(ci_min) + " " + str(ci_max))
+            # else:
+            #     median, ci_min, ci_max = calc_median_and_interquartile_range(raw_data)
             self.median_and_ci[plot_id].add(generation, median, ci_min, ci_max)
         if write_cache:
             self.to_cache()
@@ -799,8 +1007,21 @@ class DataOfInterest:
             return keys[0:len(med_ci.median.keys()):getInt("step")]
         else:
             return range(0, len(med_ci.median)*getInt("step"), getInt("step"))
-            
 
+    def get_x_values_stats(self, treatment, plot_id, stats):
+        #Read global data
+        max_generation = getInt("max_generation")
+        first_plot = getInt("to_plot")
+        x_from_file = getBool("x_from_file")
+
+        treatment_data = self.get_treatment_data(treatment)
+        med_ci = treatment_data.get_stats(first_plot, stats)
+        if max_generation == MAX_GEN_NOT_PROVIDED or x_from_file:
+            keys = sorted(med_ci.median.keys())
+            return keys[0:len(med_ci.median.keys()):getInt("step")]
+        else:
+            return range(0, len(med_ci.median)*getInt("step"), getInt("step"))
+            
     def get_comparison(self, treatment_id_1, treatment_id_2, plot_id):
         if not self.comparison_cache:
             self.init_compare()
@@ -810,7 +1031,6 @@ class DataOfInterest:
             print("Cache:", self.comparison_cache)
             return []
         return self.comparison_cache[key]
-
     
     def to_cache(self):
         # Read global data
@@ -819,7 +1039,7 @@ class DataOfInterest:
         
         with open(cache_file_name, 'w') as cache_file:
             print ("Writing " + cache_file_name + "...")
-            for entry in self.comparison_cache.iteritems():
+            for entry in self.comparison_cache.items():
                 key, generations = entry
                 main_treatment_id, other_treatment_id, plot_id = key
                 cache_file.write(str(plot_id) + " ")
@@ -879,7 +1099,7 @@ class DataOfInterest:
                     raise CacheException("Cache created with different step")
                 key = (main_treat_id_cache, other_treat_id_cache, plot_id_cache)
                 self.comparison_cache.init_key(key)
-                for i in xrange(4, len(numbers)):
+                for i in range(4, len(numbers)):
                     self.comparison_cache.add(key, int(numbers[i]))
         self.verify_cache()
 
@@ -888,7 +1108,7 @@ class DataOfInterest:
         # Verify that all data is there
         plot_ids = getIntList("to_plot")
         for plot_id in plot_ids:
-            for compare_i in xrange(len(getList("comparison_main"))):
+            for compare_i in range(len(getList("comparison_main"))):
                 main_treat_id = getStr("comparison_main", compare_i)
                 main_treat_i = get_treatment_index(main_treat_id, self)
                 for other_treat_i in get_other_treatments(compare_i, self):
@@ -905,7 +1125,7 @@ class DataOfInterest:
 
         # Compare data for all plots and all treatments
         for plot_id in plot_ids:
-            for compare_i in xrange(len(getList("comparison_main"))):
+            for compare_i in range(len(getList("comparison_main"))):
                 main_treat_id = getStr("comparison_main", compare_i)
                 main_treat_i = get_treatment_index(main_treat_id, self)
                 for other_treat_i in get_other_treatments(compare_i, self):
@@ -919,6 +1139,7 @@ class DataOfInterest:
         
         # Retrieve data
         stat_test_step = getInt("stat_test_step")
+        p_threshold = getFloat("p_threshold")
         main_treat = self.treatment_list[main_treat_i]
         main_data = self.get_treatment_data(main_treat).get_raw_data()
         other_treat = self.treatment_list[other_treat_i]
@@ -952,7 +1173,7 @@ class DataOfInterest:
                   "p-value:", p_value,
                   "mean 1:", np.mean(data1),
                   "mean 2:", np.mean(data2))
-            if p_value < 0.05:
+            if p_value < p_threshold:
                 self.comparison_cache.add(key, generation)
 
             
@@ -980,7 +1201,7 @@ def getSigMarker(compare_to_symbol):
     try:
         matplotlib.markers.MarkerStyle(sig_marker)
     except ValueError:
-        print "Warning: invalid significance marker, marker replaced with *."
+        print("Warning: invalid significance marker, marker replaced with *.")
         sig_marker = "*"
     return sig_marker 
 
@@ -989,14 +1210,14 @@ def getMarker(compare_to_symbol):
     try:
         matplotlib.markers.MarkerStyle(sig_marker)
     except ValueError:
-        print "Warning: invalid plot marker, marker replaced with *."
+        print("Warning: invalid plot marker, marker replaced with *.")
         sig_marker = "*"
     return sig_marker
 
 def getLinestyle(compare_to_symbol):
     linestyle = getStrDefaultFirst("linestyle", compare_to_symbol)
     if linestyle not in ['-', '--', '-.', ':']:
-        print "Warning: invalid linestyle, linestyle replaced with -."
+        print("Warning: invalid linestyle, linestyle replaced with -.")
         linestyle = "-"
     return linestyle 
 
@@ -1005,7 +1226,7 @@ def getFgColor(compare_to_symbol):
     try: 
         matplotlib.colors.colorConverter.to_rgb(color)
     except ValueError:
-        print "Warning: invalid treatment color, color replaced with grey."
+        print("Warning: invalid treatment color, color replaced with grey.")
         color = "#505050"
     return color
 
@@ -1017,7 +1238,7 @@ def getBgColor(compare_to_symbol):
     try: 
         matplotlib.colors.colorConverter.to_rgb(back_color)
     except ValueError:
-        print "Warning: invalid background color, color replaced with grey."
+        print("Warning: invalid background color", back_color, ", color replaced with grey.")
         back_color = "#505050"
     return back_color
 
@@ -1044,19 +1265,73 @@ def create_plots(data_of_interest):
         create_plot(plot_id, data_of_interest)
 
 
-def create_plot(plot_id, data_of_interest):
-    extra_artists[plot_id] = []
+def draw_plot(plot_id, data_of_interest, ax, stats):
     for treatment in data_of_interest.get_treatment_list():
-        plot_treatment(plot_id, treatment, data_of_interest)
+        plot_treatment(plot_id, treatment, data_of_interest, ax, stats)
+
+        
+def draw_inset(plot_id, data_of_interest, ax):
+    inset_stats = getStr('inset_stats')
+    inset_x = getFloat('inset_x')
+    inset_y = getFloat('inset_y')
+    inset_w = getFloat('inset_w')
+    inset_h = getFloat('inset_h')
+
+    inset_area_x1 = getFloat('inset_area_x1')
+    inset_area_x2 = getFloat('inset_area_x2')
+    inset_area_y1 = getFloat('inset_area_y1')
+    inset_area_y2 = getFloat('inset_area_y2')
+
+    inset_labels = getStr('inset_labels')
+    inset_ticks = getStr('inset_ticks')
+    inset_lines_visible = getStr('inset_lines_visible')
+    
+    axins = ax.inset_axes([inset_x, inset_y, inset_w, inset_h])
+    axins.set_xlim(inset_area_x1, inset_area_x2)
+    axins.set_ylim(inset_area_y1, inset_area_y2)
+    if inset_labels == 'none':
+        axins.set_xticklabels('')
+        axins.set_yticklabels('')
+    if inset_ticks == 'none':
+        axins.xaxis.set_ticks_position('none')
+        axins.yaxis.set_ticks_position('none')
+    
+    rec_patch, conn_lines = ax.indicate_inset_zoom(axins)
+    if inset_lines_visible == 'all':
+        for conn_line in conn_lines:
+            conn_line._visible = True
+    elif inset_lines_visible == 'none':
+        for conn_line in conn_lines:
+            conn_line._visible = False
+            
+    draw_plot(plot_id, data_of_interest, axins, inset_stats)
+
+        
+def create_plot(plot_id, data_of_interest):
+    stats = getStr('stats')
+    inset_stats = getStr('inset_stats')
+
+    # Backwards compatibility with outdated bootstrap option
+    bootstrap = getBool("bootstrap")
+    if bootstrap:
+        stats = 'median_and_bootstrap_percentile'
+    
+    extra_artists[plot_id] = []
+
+    plt.figure(int(plot_id))
+    ax = plt.gca()
+    draw_plot(plot_id, data_of_interest, ax, stats)
+    if inset_stats != '':
+        draw_inset(plot_id, data_of_interest, ax)
 
 
-def plot_treatment(plot_id, treatment, data_of_interest):
+def plot_treatment(plot_id, treatment, data_of_interest, ax, stats):
     #Get data
     max_generation = data_of_interest.get_max_generation()
     treatment_name = treatment.get_name()
     treatment_index = treatment.get_id()
     treatment_data = data_of_interest.get_treatment_data(treatment)
-    mean_and_ci = treatment_data.get_median_and_ci(plot_id)
+    mean_and_ci = treatment_data.get_stats(plot_id, stats)
 
     marker = getMarker(treatment_index)
     linestyle = getLinestyle(treatment_index)
@@ -1085,7 +1360,7 @@ def plot_treatment(plot_id, treatment, data_of_interest):
     var_max = median_filter(var_max, getInt("smoothing"))
 
     #Calculate plot markers
-    data_step_x = data_of_interest.get_x_values(treatment, plot_id)
+    data_step_x = data_of_interest.get_x_values_stats(treatment, plot_id, stats)
     debug_print("plot", "X len", len(data_step_x), "X data: ", data_step_x)
     debug_print("plot", "Y len", len(plot_mean), "Y data: ", plot_mean)
     assert(len(data_step_x) == len(plot_mean))
@@ -1096,8 +1371,8 @@ def plot_treatment(plot_id, treatment, data_of_interest):
         marker_step = max_generation / 10
         if marker_step < 1:
             marker_step = 1
-    adj_marker_step = marker_step/getInt("step")
-    adjusted_marker_offset = marker_offset/getInt("step")
+    adj_marker_step = int(marker_step/getInt("step"))
+    adjusted_marker_offset = int(marker_offset/getInt("step"))
 
     #Debug statements
     debug_print("plot", "Marker step: " + str(marker_step) +
@@ -1106,6 +1381,8 @@ def plot_treatment(plot_id, treatment, data_of_interest):
                 " adjusted: " + str(adjusted_marker_offset))
 
     #Calculate markers
+    print('adjusted_marker_offset', adjusted_marker_offset)
+    print('adj_marker_step', adj_marker_step)
     plot_marker_y = plot_mean[adjusted_marker_offset:len(plot_mean):adj_marker_step]
     plot_marker_x = data_step_x[adjusted_marker_offset:len(plot_mean):adj_marker_step]
     
@@ -1124,27 +1401,27 @@ def plot_treatment(plot_id, treatment, data_of_interest):
     #    data_step_x = range(0, len(plot_mean)*getInt("step"), getInt("step"))
 
     #Plot mean
-    plt.figure(int(plot_id))    
+        
 
     #The actual median
-    plt.plot(data_step_x, plot_mean, color=color, linewidth=LINE_WIDTH,
+    ax.plot(data_step_x, plot_mean, color=color, linewidth=LINE_WIDTH,
              linestyle=linestyle)
 
     #Fill confidence interval
     alpha=getFloat("confidence_interval_alpha")
-    plt.fill_between(data_step_x, var_min, var_max, edgecolor=bg_color,
+    ax.fill_between(data_step_x, var_min, var_max, edgecolor=bg_color,
                      facecolor=bg_color, alpha=alpha, linewidth=NO_LINE)
 
     if getBool("plot_confidence_interval_border"):
         style=getStr("confidence_interval_border_style")
         width=getFloat("confidence_interval_border_width")
-        plt.plot(data_step_x, var_min, color=color, linewidth=width,
+        ax.plot(data_step_x, var_min, color=color, linewidth=width,
                  linestyle=style)
-        plt.plot(data_step_x, var_max, color=color, linewidth=width,
+        ax.plot(data_step_x, var_max, color=color, linewidth=width,
                  linestyle=style)
 
     #Markers used on top of the line in the plot
-    plt.plot(plot_marker_x, plot_marker_y,
+    ax.plot(plot_marker_x, plot_marker_y,
              color=color,
              linewidth=NO_LINE,
              marker=marker,
@@ -1152,7 +1429,7 @@ def plot_treatment(plot_id, treatment, data_of_interest):
 
     #Markers used in the legend
     #To plot the legend markers, plot a point completely outside of the plot.
-    plt.plot([data_step_x[0] - max_generation], [0], color=color,
+    ax.plot([data_step_x[0] - max_generation], [0], color=color,
              linewidth=LINE_WIDTH, linestyle=linestyle, marker=marker,
              label=treatment_name, markersize=marker_size)
     
@@ -1315,8 +1592,8 @@ def add_significance_bar(i, gs, data_intr, bar_nr):
 
 def plot_significance(gs, data_intr):
     print("Calculating significance...")
-    for i in xrange(len(getList("to_plot"))):
-        for j in xrange(len(getList("comparison_main"))):
+    for i in range(len(getList("to_plot"))):
+        for j in range(len(getList("comparison_main"))):
             add_significance_bar(i, gs, data_intr, j)
     print("Calculating significance done.")
 
@@ -1351,28 +1628,31 @@ def setup_plots(nr_of_generations):
     if getBool("sig"):
         ratios = [10]
         nr_of_comparisons = len(getList("comparison_main"))
-        for i in xrange(nr_of_comparisons):
+        for i in range(nr_of_comparisons):
             ratios.append(getFloat("comparison_height", i))
         high_level_ratios = [ratios[0], sum(ratios[1:])]
         
         #gs = gridspec.GridSpec(1 + nr_of_comparisons, 1, height_ratios=ratios)
-        gs = gridspec.GridSpec(2, 1,
-                               height_ratios=high_level_ratios,
-                               hspace=getFloat("box_margin_before"))
-        gs1 = gridspec.GridSpecFromSubplotSpec(nr_of_comparisons, 1,
-                                               subplot_spec=gs[1],
-                                               height_ratios=ratios[1:],
-                                               hspace=getFloat("box_margin_between"))
+        main_plot_gridspec = gridspec.GridSpec(
+            2, 1,
+            height_ratios=high_level_ratios,
+            hspace=getFloat("box_margin_before"))
+        sig_indicator_gridspec = gridspec.GridSpecFromSubplotSpec(
+            nr_of_comparisons, 1,
+            subplot_spec=main_plot_gridspec[1],
+            height_ratios=ratios[1:],
+            hspace=getFloat("box_margin_between"))
         #gs.update(hspace=getFloat("box_margin_before"))
         #gs1.update(hspace=getFloat("box_margin_between"))
     else:
-        gs1 = gridspec.GridSpec(1, 1)
+        main_plot_gridspec = gridspec.GridSpec(1, 1)
+        sig_indicator_gridspec = None
 
     # Set all labels and limits for the main window (gs[0])
-    for i in xrange(len(getList("to_plot"))):
+    for i in range(len(getList("to_plot"))):
         plot_id = getInt("to_plot", i)
         fig = plt.figure(plot_id,  figsize=getFloatPair("fig_size"))
-        ax = fig.add_subplot(gs[0])
+        ax = fig.add_subplot(main_plot_gridspec[0])
         ax.set_ylabel(getStr("y_labels", i))
         if getExists("y_axis_min", i) and getExists("y_axis_max", i):
             ax.set_ylim(getFloat("y_axis_min", i), getFloat("y_axis_max", i))
@@ -1385,15 +1665,14 @@ def setup_plots(nr_of_generations):
         if getBool("sig"): 
             ax.tick_params(labelbottom=False)
             ax.set_xlabel("")
+            ax.tick_params(axis='x', bottom='off')
         else:
             ax.set_xlabel(getStrDefaultFirst("x_labels", i))
         if getBool("title"):
             plt.title(getStr("titles", i), fontsize=getInt("title_size"))
         if getExists("x_ticks"):
             ax.set_xticks(getIntList("x_ticks"))
-        ax.tick_params(axis='x', bottom='off')
-
-    return gs1
+    return sig_indicator_gridspec
 
 
 def write_plots():
@@ -1404,7 +1683,7 @@ def write_plots():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    for i in xrange(len(getList("to_plot"))):
+    for i in range(len(getList("to_plot"))):
         print("Writing plot " + str(i) + " ...")
         plot_id = getInt("to_plot", i)
         fig = plt.figure(plot_id)
@@ -1419,7 +1698,8 @@ def write_plots():
             debug_print("legend", "location:", loc, "columns:", columns ,
                         "anchor x:", anchor_x, "anchor y:", anchor_y)
             lgd = ax.legend(loc=loc, ncol=columns,
-                            bbox_to_anchor=(anchor_x, anchor_y, 1, 1))
+                            bbox_to_anchor=(anchor_x, anchor_y, 1, 1),
+                            labelspacing=0.1)
             extra_artists[plot_id].append(lgd)
             
         # Determine custom bounding box
@@ -1431,25 +1711,79 @@ def write_plots():
             target_bb = matplotlib.transforms.Bbox.from_bounds(0,0, fig_size[0], fig_size[1])
             trans2 = matplotlib.transforms.BboxTransformTo(target_bb)
             trans = fig.transFigure.inverted()
-            print "Figure size:", fig_size
-            print "Original bb box:", bb.get_points()
+            print("Figure size:", fig_size)
+            print("Original bb box:", bb.get_points())
             for artist in extra_artists[plot_id]:
                 other_bb = artist.get_window_extent(renderer)
                 other_bb = other_bb.transformed(trans)
                 other_bb = other_bb.transformed(trans2)
-                print other_bb.get_points()
+                print(other_bb.get_points())
                 bb = matplotlib.transforms.BboxBase.union([bb, other_bb])
             target_aspect = fig_size[0] / fig_size[1]
             bb_aspect = bb.width / bb.height
-            print target_aspect, bb_aspect
+            print(target_aspect, bb_aspect)
             if target_aspect < bb_aspect:
                 bb = bb.expanded(1, bb_aspect / target_aspect)
             else:
                 bb = bb.expanded(target_aspect / bb_aspect, 1)
             bb = bb.padded(0.2)
-            print "Extended bb box:", bb.get_points()
+            print("Extended bb box:", bb.get_points())
             plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,
                     bbox_extra_artists=extra_artists[plot_id], bbox_inches=bb)
+        elif getStr("bb") == "manual":
+            fig_size = getFloatPair("fig_size")
+            renderer = get_renderer(fig)
+            ext_width = getFloat("bb_width")
+            ext_heigth = getFloat("bb_height")
+            x_offset = getFloat("bb_x_offset")
+            y_offset = getFloat("bb_y_offset")
+            x_tight_center = getFloat("bb_x_center_includes_labels")
+            y_tight_center = getFloat("bb_y_center_includes_labels")
+
+            # Get the transformations that we need
+            inches_to_pixels = fig.dpi_scale_trans
+            pixels_to_inches = inches_to_pixels.inverted()
+
+            # Get the bounding box of the window
+            win_bb_in_pixels = fig.get_window_extent(renderer)
+
+            # Get the bounding box of the actual figure, including labels
+            fig_bb_in_inches = fig.get_tightbbox(renderer)
+            fig_bb_in_pixels = fig_bb_in_inches.transformed(inches_to_pixels)
+
+            # Get a new bounding box just as wide as the window, but with the
+            # center of the figure bounding box
+            new_bb_in_pixels = win_bb_in_pixels.frozen()
+
+            if x_tight_center:
+                width_ratio = win_bb_in_pixels.width / fig_bb_in_pixels.width
+                new_bb_in_pixels.x0 = fig_bb_in_pixels.x0
+                new_bb_in_pixels.x1 = fig_bb_in_pixels.x1
+                new_bb_in_pixels = new_bb_in_pixels.expanded(width_ratio, 1)
+
+            if y_tight_center:
+                height_ratio = win_bb_in_pixels.height / fig_bb_in_pixels.height
+                new_bb_in_pixels.y0 = fig_bb_in_pixels.y0
+                new_bb_in_pixels.y1 = fig_bb_in_pixels.y1
+                new_bb_in_pixels = new_bb_in_pixels.expanded(1, height_ratio)
+
+            # Transform to inch space
+            bb_in_inches = new_bb_in_pixels.transformed(pixels_to_inches)
+
+            # Apply custom transformations
+            bb_in_inches = bb_in_inches.expanded(
+                float(ext_width)/float(fig_size[0]),
+                float(ext_heigth)/float(fig_size[1]))
+            
+            bb_in_inches.y0 += y_offset
+            bb_in_inches.y1 += y_offset
+
+            bb_in_inches.x0 += x_offset
+            bb_in_inches.x1 += x_offset
+                
+            plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,
+                    bbox_extra_artists=extra_artists[plot_id],
+                        bbox_inches=bb_in_inches)
         elif getStr("bb") == "default":
             plt.savefig(output_dir + "/" + getStr("file_names", i) + ext,
                     bbox_extra_artists=extra_artists[plot_id])
@@ -1469,7 +1803,7 @@ def parse_options():
     parse_global_options()
 
     treatment_list = TreatmentList()
-    for i in xrange(len(getList("input_directories"))):
+    for i in range(len(getList("input_directories"))):
         if getBool("one_value_per_dir"):
             if len(treatment_list) < 1:
                 treatment_list.add_treatment(getStr("input_directories", i),
@@ -1482,15 +1816,15 @@ def parse_options():
                                          getStr("treatment_names", i),
                                          getStr("treatment_names_short", i))
 
-    for i in xrange(len(getList("file"))):
+    for i in range(len(getList("file"))):
         treatment_list.add_treatment(getStr("file", i),
                                      getStr("treatment_names", i),
                                      getStr("treatment_names_short", i))
 
     if len(treatment_list) < 1:
-        print "No treatments provided"
+        print("No treatments provided")
         sys.exit(1)
-
+        
     if len(treatment_list) == 1:
         setGlb("sig", [False])
 
@@ -1511,14 +1845,14 @@ def parse_options():
 ######################
 def main():
     treatment_list, data_of_interest = parse_options()
-    gs = setup_plots(data_of_interest.get_max_generation())
+    sig_indicator_gridspec = setup_plots(data_of_interest.get_max_generation())
 
     #Plot all treatments
     create_plots(data_of_interest)
 
     #Plots the dots indicating significance
     if getBool("sig"):
-        plot_significance(gs, data_of_interest)
+        plot_significance(sig_indicator_gridspec, data_of_interest)
 
     #Writes the plots to disk
     write_plots()

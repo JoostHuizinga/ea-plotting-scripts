@@ -1,5 +1,5 @@
 __author__ = 'Joost Huizinga'
-__version__ = '1.7 (Jun. 27 2018)'
+__version__ = '1.8 (Jun. 27 2019)'
 import sys
 import os.path
 import re
@@ -11,6 +11,8 @@ import subprocess as sp
 import argparse as ap
 import warnings
 import io
+import random
+import quantiles
 
 ###################
 #### EXCEPTIONS ###
@@ -236,7 +238,7 @@ def parse_global_options():
 
     #Retrieve values from the provided options, overwriting defaults and config settings
     arg_dict = vars(args)
-    for option in arg_dict.iteritems():
+    for option in arg_dict.items():
         key, _ = option
         if arg_dict[key]:
             value = arg_dict[key]
@@ -245,7 +247,7 @@ def parse_global_options():
             setGlb(key, value)
     
     #If an option has a derived default, and the default was not overwritten, use the derived default
-    for option in global_options.iteritems():
+    for option in global_options.items():
         key, value = option
         #print("For key:", key)
         if hasattr(value, '__call__'):
@@ -429,13 +431,13 @@ def base(filename):
 ###################
 def smooth(x, window_len=11, window='hanning'):
     if x.ndim != 1:
-        raise ValueError, "smooth only accepts 1 dimension arrays."
+        raise ValueError("smooth only accepts 1 dimension arrays.")
     if x.size < window_len:
-        raise ValueError, "Input vector needs to be bigger than window size."
+        raise ValueError("Input vector needs to be bigger than window size.")
     if window_len < 3:
         return x
     if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
-        raise ValueError, "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
+        raise ValueError("Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
     s = np.r_[2 * x[0] - x[window_len - 1::-1], x, 2 * x[-1] - x[-1:-window_len:-1]]
     if window == 'flat': #moving average
         w = np.ones(window_len, 'd')
@@ -465,6 +467,79 @@ def median_filter(x, k):
     return np.median(y, axis=1)
 
 
+def bootstrap(data, ci=0.95, n_samples=10000, statfunction=np.mean, method=''):
+    stat = statfunction(data)
+    if method == 'percentile' or method == 'pivotal':
+        is_pivotal = method == 'pivotal'
+        ci_min, ci_max = my_bootstrap(data, ci, n_samples, is_pivotal, statfunction)
+    else:
+        # 'pi', 'bca', or 'abc'
+        try:
+            ci_min, ci_max = bs.ci(data=data,
+                                   statfunction=statfunction,
+                                   n_samples=n_samples,
+                                   method=method,
+                                   alpha=1-ci)
+        except IndexError:
+            ci_min = stat
+            ci_max = stat
+    return stat, ci_min, ci_max
+
+
+def my_bootstrap(data, ci=0.95, n_samples=10000, is_pivotal=True, statfunction=np.mean):
+    """
+    While our method is much slower, it does not throw an exception when the
+    median value exists twice in the data.
+    """
+    statistics = np.zeros(n_samples)
+    for i in range(n_samples):
+        samples = []
+        for j in range(len(data)):
+            samples.append(random.choice(data))
+        stat = statfunction(samples)
+        statistics[i] = stat
+    inv = float(1.0-ci)/2.0
+    stat_val = statfunction(data)
+    if is_pivotal:
+        low = 2 * stat_val - quantiles.quantile(statistics, 1.0-inv)
+        high = 2 * stat_val - quantiles.quantile(statistics, inv)
+        # print(high, low, 'quantiles:',
+        # quantiles.quantile(statistics, 1.0-inv),
+        #       quantiles.quantile(statistics, inv), 2 * stat_val)
+    else:
+        high = quantiles.quantile(statistics, 1.0-inv)
+        low = quantiles.quantile(statistics, inv)
+#     print(statistics)
+    return low, high
+
+
+def calc_stats(data, stats, ci=0.95, n_samples=2000):
+    if stats == 'median_and_interquartile_range':
+        return calc_median_and_interquartile_range(data)
+    elif stats == 'mean_and_std_error':
+        return calc_mean_and_std_error(data)
+    elif stats == 'median_and_bootstrap_percentile':
+        return bootstrap(data, ci, n_samples, np.median, 'percentile')
+    elif stats == 'median_and_bootstrap_pivotal':
+        return bootstrap(data, ci, n_samples, np.median, 'pivotal')
+    elif stats == 'median_and_bootstrap_bca':
+        return bootstrap(data, ci, n_samples, np.median, 'bca')
+    elif stats == 'median_and_bootstrap_pi':
+        return bootstrap(data, ci, n_samples, np.median, 'pi')
+    elif stats == 'median_and_bootstrap_abc':
+        return bootstrap(data, ci, n_samples, np.median, 'abc')
+    elif stats == 'mean_and_bootstrap_percentile':
+        return bootstrap(data, ci, n_samples, np.mean, 'percentile')
+    elif stats == 'mean_and_bootstrap_pivotal':
+        return bootstrap(data, ci, n_samples, np.mean, 'pivotal')
+    elif stats == 'mean_and_bootstrap_bca':
+        return bootstrap(data, ci, n_samples, np.mean, 'bca')
+    elif stats == 'mean_and_bootstrap_pi':
+        return bootstrap(data, ci, n_samples, np.mean, 'pi')
+    elif stats == 'mean_and_bootstrap_abc':
+        return bootstrap(data, ci, n_samples, np.mean, 'abc')
+
+
 def calc_median_and_interquartile_range(data):
     data_sorted = sorted(data)
     median = np.median(data_sorted)
@@ -473,17 +548,16 @@ def calc_median_and_interquartile_range(data):
     return median, ci_min, ci_max
 
 
-def calc_median_and_bootstrap(data, n_samples=2000):
-    data_sorted = sorted(data)
-    median = np.median(data_sorted)
-    try:
-        ci_min, ci_max = bs.ci(data=data,
-                               statfunction=np.median,
-                               n_samples=n_samples)
-    except IndexError:
-        ci_min = median
-        ci_max = median
-    return median, ci_min, ci_max
+# def calc_median_and_bootstrap(data, ci=0.95, n_samples=2000, method='pivotal'):
+#     data_sorted = sorted(data)
+#     median = np.median(data_sorted)
+#     ci_min, ci_max = bootstrap(data=data,
+#                                ci=ci,
+#                                statfunction=np.median,
+#                                n_samples=n_samples,
+#                                method=method)
+#     return median, ci_min, ci_max
+
 
 def calc_mean_and_std_error(data):
     data_sorted = sorted(data)
@@ -499,15 +573,19 @@ def calc_mean_and_std_error(data):
     return median, ci_min, ci_max
 
 
-def calc_mean_and_bootstrap(data):
-    data_sorted = sorted(data)
-    median = np.mean(data_sorted)
-    try:
-        ci_min, ci_max = bs.ci(data=data, statfunction=np.mean, n_samples=5000)
-    except IndexError:
-        ci_min = median
-        ci_max = median
-    return median, ci_min, ci_max
+# def calc_mean_and_bootstrap(data, n_samples=2000):
+#     data_sorted = sorted(data)
+#     median = np.mean(data_sorted)
+#     ci_min, ci_max = bootstrap(data=data,
+#                                statfunction=np.mean,
+#                                n_samples=n_samples)
+#     # try:
+#     #     ci_min, ci_max = bs.ci(data=data, statfunction=np.mean, n_samples=5000)
+#     # except IndexError:
+#     #     ci_min = median
+#     #     ci_max = median
+#     return median, ci_min, ci_max
+
 
 def mann_whitney_u(data1, data2):
     try:
@@ -555,7 +633,7 @@ def debug_print(key, *args):
     for arg in args:
         message += (str(arg) + " ") 
     if key in debug_enabled:
-        print bcolors.OKGREEN + str(key) + bcolors.ENDC, "|", message
+        print(bcolors.OKGREEN + str(key) + bcolors.ENDC, "|", message)
 
 
 ###################
