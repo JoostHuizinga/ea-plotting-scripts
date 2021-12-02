@@ -1,0 +1,24 @@
+#### General ####
+templates "file.*.dat"
+
+#### Plots ####
+plot_title      "Example plot"
+plot_y_label    "Performance"
+plot_x_label    ""
+plot_y_min      "0.0"
+plot_y_max      "1.0"
+plot_legend_loc "none"
+x_from_file     "True"
+x_column        "0"
+one_plot_per_treatment "True"
+
+#### Treatments ####
+treatment_name   "Treatment 1"
+treatment_dir    "treatment1"
+treatment_color  "#008200"
+plot_output      "treatment1"
+
+treatment_name   "Treatment 2"
+treatment_dir    "treatment2"
+treatment_color  "#000082"
+plot_output      "treatment2"

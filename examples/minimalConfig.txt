@@ -1,0 +1,6 @@
+#### General ####
+templates "file.*.dat"
+
+#### Treatments ####
+treatment_dir    "treatment1"
+treatment_dir    "treatment2"

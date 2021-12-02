@@ -1,0 +1,79 @@
+#### General ####
+fig_size 10 9
+marker_step "40"
+stat_test_step 10
+box_margin_between 0.20
+box_margin_before  0.03
+sig_header "\textit{p<0.007 vs:}"
+p_threshold 0.007
+sig_header_show True
+sig_header_y_offset 0.01
+sig_header_x_offset 0.01
+bootstrap True
+marker_size 14
+legend_label_spacing 0.3
+legend_columns 2
+
+#### Font sizes ####
+font_size 20
+title_font_size 20
+tick_font_size 14
+legend_font_size 14
+sig_treat_lbls_font_size 14
+sig_header_font_size 16
+
+#### Experiment specific ####
+templates "file.*.dat"
+step 2
+max_generation 100
+
+#### Plots ####
+plot_title      "Four treatment figure"
+plot_output     "four_treatments"
+plot_column     "1"
+plot_y_label    "Latex in label ($\epsilon \times \pi$)"
+plot_y_min      "0.0"
+plot_y_max      "1.0"
+plot_legend_loc "lower right"
+
+#### Treatments ####
+treatment_name       "Default background color"
+treatment_name_short "Def. back. color"
+treatment_dir        "treatment1"
+treatment_color      "#008200"
+treatment_bgcolor    "default"
+treatment_linestyle  "-"
+treatment_marker     "o"
+
+treatment_name       "Latex in name $\epsilon$"
+treatment_name_short "Latex $\epsilon$"
+treatment_dir        "treatment2"
+treatment_color      "#000082"
+treatment_bgcolor    "#6060f0"
+treatment_linestyle  "-"
+treatment_marker     "s"
+
+treatment_name       "No marker style"
+treatment_name_short "No marker"
+treatment_dir        "treatment3"
+treatment_color      "#000000"
+treatment_marker     "none"
+treatment_linestyle  "--"
+treatment_bgcolor    "default"
+
+treatment_name       "Regular treatment"
+treatment_name_short "Regular"
+treatment_dir        "treatment4"
+treatment_color      "#008282"
+treatment_bgcolor    "#00e2e2"
+treatment_marker     "d"
+treatment_linestyle  "--"
+
+#### Comparisons ####
+comparison_main      "Default background color"
+comparison_others    "Latex in name $\epsilon$,No marker style,Regular treatment"
+comparison_height    1.5
+
+comparison_main      "Latex in name $\epsilon$"
+comparison_others    "Regular treatment"
+comparison_height    0.5

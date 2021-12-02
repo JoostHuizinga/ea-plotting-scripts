@@ -1,5 +1,6 @@
 import unittest
 import createPlots
+import createBarplot
 import treatment_list as tl
 import global_options as go
 
@@ -17,6 +18,18 @@ class TestCreatePlots(unittest.TestCase):
         createPlots.init_options()
         createPlots.execute_plots(["-c", "examples/fourTreatmentsConfig.txt",
                                    "--debug", "plot", "--debug", "files"])
+
+
+class TestCreateBarplot(unittest.TestCase):
+    def test_example_config(self):
+        createBarplot.init_options()
+        createBarplot.execute_plots(["-c", "examples/barplotExampleConfig.txt", "--debug", "plot",
+                                     "--debug", "files", "--debug", "data"])
+
+    def test_example_config2(self):
+        createBarplot.init_options()
+        createBarplot.execute_plots(["-c", "examples/barplotExampleConfig2.txt", "--debug", "plot",
+                                     "--debug", "files", "--debug", "data"])
 
 
 class TestTreatmentList(unittest.TestCase):

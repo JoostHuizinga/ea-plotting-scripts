@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Optional
 import subprocess as sp
 import matplotlib
 import matplotlib.transforms
@@ -59,7 +59,7 @@ def init_params():
     matplotlib.rcParams.update(params)
 
 
-def init_subplot(plot_config: PlotConfiguration, subplot_id: int, subplot_spec):
+def init_subplot(plot_config: PlotConfiguration, subplot_id, subplot_spec):
     fig = plt.figure(plot_config.plot_id)
     ax = fig.add_subplot(subplot_spec, label=str(subplot_id))
     ax.set_ylim(go.get_float("y_axis_min", plot_config.plot_id, when_not_exist=go.RETURN_FIRST, default=None),
@@ -114,6 +114,12 @@ def get_plot_ids() -> List[int]:
     :return: A list of plot-ids.
     """
     return list(range(len(go.get_indices("file_names"))))
+
+
+def setup_plot(plot_config: PlotConfiguration, gridspec: Optional[gs.GridSpec] = None):
+    if gridspec is None:
+        gridspec = plot_config.gridspec_dict["main"]
+    init_subplot(plot_config, 0, gridspec[0])
 
 
 def setup_plots(plot_ids: List[int] = None, gridspec=gs.GridSpec(1, 1)):

@@ -1,0 +1,10 @@
+#### General ####
+templates ".*" "result.dat"
+par_column_start 6
+generation 0
+
+#### Treatments ####
+treatment_name   "Treatment 1"
+treatment_dir    "pareto_treatment"
+treatment_color  "#008200"
+treatment_marker "o"
